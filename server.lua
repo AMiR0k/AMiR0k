@@ -36,6 +36,131 @@ local function isPlayerDead(source)
     return not ped or ped == 0 or GetEntityHealth(ped) <= 0
 end
 
+
+local databaseReady = false
+local databaseMigrating = false
+
+local function ensureDatabaseSchema()
+    if databaseReady then return true end
+
+    while databaseMigrating do Wait(50) end
+    if databaseReady then return true end
+
+    databaseMigrating = true
+    local ok, err = pcall(function()
+        MySQL.query.await([[
+            CREATE TABLE IF NOT EXISTS `player_farms` (
+              `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+              `uuid` VARCHAR(36) NOT NULL,
+              `owner_identifier` VARCHAR(64) NOT NULL,
+              `farm_slot` INT UNSIGNED NOT NULL,
+              `bucket` INT UNSIGNED NOT NULL,
+              `expires_at` INT UNSIGNED NOT NULL,
+              `stash_capacity` INT UNSIGNED NOT NULL DEFAULT 250,
+              `created_at` INT UNSIGNED NOT NULL,
+              PRIMARY KEY (`id`),
+              UNIQUE KEY `uniq_player_farms_uuid` (`uuid`),
+              KEY `idx_player_farms_owner` (`owner_identifier`),
+              KEY `idx_player_farms_expires` (`expires_at`),
+              UNIQUE KEY `uniq_player_farms_slot` (`farm_slot`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ]])
+
+        MySQL.query.await([[
+            CREATE TABLE IF NOT EXISTS `farm_plants` (
+              `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+              `farm_uuid` VARCHAR(36) NOT NULL,
+              `slot_id` INT UNSIGNED NOT NULL,
+              `seed_item` VARCHAR(64) NOT NULL,
+              `product_item` VARCHAR(64) NOT NULL,
+              `prop` VARCHAR(96) NOT NULL,
+              `planted_at` INT UNSIGNED NOT NULL,
+              `locked` TINYINT(1) NOT NULL DEFAULT 0,
+              PRIMARY KEY (`id`),
+              UNIQUE KEY `uniq_farm_plants_slot` (`farm_uuid`, `slot_id`),
+              KEY `idx_farm_plants_age` (`planted_at`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ]])
+
+        MySQL.query.await([[
+            CREATE TABLE IF NOT EXISTS `farm_access` (
+              `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+              `farm_uuid` VARCHAR(36) NOT NULL,
+              `identifier` VARCHAR(64) NOT NULL,
+              `granted_by` VARCHAR(64) NOT NULL,
+              `granted_at` INT UNSIGNED NOT NULL,
+              PRIMARY KEY (`id`),
+              UNIQUE KEY `uniq_farm_access_farm` (`farm_uuid`),
+              KEY `idx_farm_access_identifier` (`identifier`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ]])
+
+        MySQL.query.await([[
+            CREATE TABLE IF NOT EXISTS `farm_storage_upgrade` (
+              `farm_uuid` VARCHAR(36) NOT NULL,
+              `upgraded` TINYINT(1) NOT NULL DEFAULT 0,
+              `upgraded_at` INT UNSIGNED NULL DEFAULT NULL,
+              PRIMARY KEY (`farm_uuid`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ]])
+
+        local databaseName = MySQL.scalar.await('SELECT DATABASE()')
+
+        local function columnExists(tableName, columnName)
+            local count = MySQL.scalar.await([[
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ?
+            ]], { databaseName, tableName, columnName })
+
+            return tonumber(count) and tonumber(count) > 0
+        end
+
+        local function addColumnIfMissing(tableName, columnName, definition)
+            if columnExists(tableName, columnName) then return end
+            MySQL.query.await(('ALTER TABLE `%s` ADD COLUMN `%s` %s'):format(tableName, columnName, definition))
+            print(('[farming] Added missing database column %s.%s'):format(tableName, columnName))
+        end
+
+        -- These checks repair servers that already had a farm_plants table from an
+        -- older/different farming script. Without this, queries using farm_uuid fail
+        -- with "Unknown column 'farm_uuid' in 'where clause'".
+        addColumnIfMissing('player_farms', 'uuid', 'VARCHAR(36) NULL')
+        addColumnIfMissing('player_farms', 'owner_identifier', 'VARCHAR(64) NULL')
+        addColumnIfMissing('player_farms', 'farm_slot', 'INT UNSIGNED NULL')
+        addColumnIfMissing('player_farms', 'bucket', 'INT UNSIGNED NULL')
+        addColumnIfMissing('player_farms', 'expires_at', 'INT UNSIGNED NOT NULL DEFAULT 0')
+        addColumnIfMissing('player_farms', 'stash_capacity', ('INT UNSIGNED NOT NULL DEFAULT %d'):format(Config.InitialStorageKg))
+        addColumnIfMissing('player_farms', 'created_at', 'INT UNSIGNED NOT NULL DEFAULT 0')
+
+        addColumnIfMissing('farm_plants', 'farm_uuid', 'VARCHAR(36) NULL')
+        addColumnIfMissing('farm_plants', 'slot_id', 'INT UNSIGNED NULL')
+        addColumnIfMissing('farm_plants', 'seed_item', 'VARCHAR(64) NULL')
+        addColumnIfMissing('farm_plants', 'product_item', 'VARCHAR(64) NULL')
+        addColumnIfMissing('farm_plants', 'prop', 'VARCHAR(96) NULL')
+        addColumnIfMissing('farm_plants', 'planted_at', 'INT UNSIGNED NOT NULL DEFAULT 0')
+        addColumnIfMissing('farm_plants', 'locked', 'TINYINT(1) NOT NULL DEFAULT 0')
+
+        addColumnIfMissing('farm_access', 'farm_uuid', 'VARCHAR(36) NULL')
+        addColumnIfMissing('farm_access', 'identifier', 'VARCHAR(64) NULL')
+        addColumnIfMissing('farm_access', 'granted_by', 'VARCHAR(64) NULL')
+        addColumnIfMissing('farm_access', 'granted_at', 'INT UNSIGNED NOT NULL DEFAULT 0')
+
+        addColumnIfMissing('farm_storage_upgrade', 'farm_uuid', 'VARCHAR(36) NULL')
+        addColumnIfMissing('farm_storage_upgrade', 'upgraded', 'TINYINT(1) NOT NULL DEFAULT 0')
+        addColumnIfMissing('farm_storage_upgrade', 'upgraded_at', 'INT UNSIGNED NULL DEFAULT NULL')
+    end)
+
+    databaseMigrating = false
+
+    if not ok then
+        print(('[farming] Database schema check failed: %s'):format(err))
+        return false
+    end
+
+    databaseReady = true
+    return true
+end
+
 local function registerFarmStash(farm)
     if not farm or registeredStashes[farm.uuid] then return end
 
@@ -45,17 +170,20 @@ local function registerFarmStash(farm)
 end
 
 local function cleanupExpiredFarm(farm)
+    if not ensureDatabaseSchema() then return end
     if not isExpired(farm) then return end
     MySQL.update.await('DELETE FROM farm_access WHERE farm_uuid = ?', { farm.uuid })
 end
 
 local function farmByOwner(identifier)
+    if not ensureDatabaseSchema() then return nil end
     local farm = MySQL.single.await('SELECT * FROM player_farms WHERE owner_identifier = ? ORDER BY id DESC LIMIT 1', { identifier })
     if farm then cleanupExpiredFarm(farm) end
     return farm
 end
 
 local function farmByAccess(identifier)
+    if not ensureDatabaseSchema() then return nil end
     local farm = MySQL.single.await([[ 
         SELECT pf.* FROM player_farms pf
         INNER JOIN farm_access fa ON fa.farm_uuid = pf.uuid
@@ -85,6 +213,7 @@ local function isOwner(source, farm)
 end
 
 local function canUseFarm(source, uuid)
+    if not ensureDatabaseSchema() then return false end
     local identifier = getIdentifier(source)
     if not identifier then return false end
 
@@ -103,11 +232,13 @@ local function canUseFarm(source, uuid)
 end
 
 local function getPlants(uuid)
+    if not ensureDatabaseSchema() then return {} end
     MySQL.update.await('DELETE FROM farm_plants WHERE farm_uuid = ? AND planted_at <= ?', { uuid, now() - (Config.PlantLifeHours * 3600) })
     return MySQL.query.await('SELECT * FROM farm_plants WHERE farm_uuid = ? ORDER BY slot_id ASC', { uuid }) or {}
 end
 
 local function usedSlots(uuid)
+    if not ensureDatabaseSchema() then return {} end
     local rows = MySQL.query.await('SELECT slot_id FROM farm_plants WHERE farm_uuid = ?', { uuid }) or {}
     local used = {}
     for _, row in ipairs(rows) do used[tonumber(row.slot_id)] = true end
@@ -115,17 +246,20 @@ local function usedSlots(uuid)
 end
 
 local function registerAllStashes()
+    if not ensureDatabaseSchema() then return end
     local farms = MySQL.query.await('SELECT * FROM player_farms') or {}
     for _, farm in ipairs(farms) do registerFarmStash(farm) end
 end
 
 local function ensureStorageUpgradeRow(uuid)
+    if not ensureDatabaseSchema() then return end
     MySQL.insert.await('INSERT IGNORE INTO farm_storage_upgrade (farm_uuid, upgraded, upgraded_at) VALUES (?, 0, NULL)', { uuid })
 end
 
 CreateThread(function()
     math.randomseed(os.time())
     Wait(500)
+    ensureDatabaseSchema()
     registerAllStashes()
 end)
 
@@ -142,6 +276,7 @@ exports.ox_inventory:registerHook('swapItems', function(payload)
 end)
 
 lib.callback.register('amirok_farming:getMenuData', function(source)
+    if not ensureDatabaseSchema() then return { hasFarm = false, error = 'database' } end
     local identifier = getIdentifier(source)
     if not identifier then return { hasFarm = false } end
 
