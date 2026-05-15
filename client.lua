@@ -2,6 +2,8 @@ local currentFarm = nil
 local currentPlants = {}
 local spawnedProps = {}
 local insideFarm = false
+local pendingEnter = false
+local pendingExit = false
 
 local function notify(message, notifyType)
     lib.notify({ description = message, type = notifyType or 'inform' })
@@ -39,10 +41,27 @@ end
 
 local function fadeTeleport(coords)
     DoScreenFadeOut(650)
-    while not IsScreenFadedOut() do Wait(0) end
+
+    local timeout = GetGameTimer() + 3500
+    while not IsScreenFadedOut() and GetGameTimer() < timeout do Wait(0) end
+
+    RequestCollisionAtCoord(coords.x, coords.y, coords.z)
     SetEntityCoords(cache.ped, coords.x, coords.y, coords.z, false, false, false, true)
+
+    local collisionTimeout = GetGameTimer() + 3000
+    while not HasCollisionLoadedAroundEntity(cache.ped) and GetGameTimer() < collisionTimeout do
+        RequestCollisionAtCoord(coords.x, coords.y, coords.z)
+        Wait(50)
+    end
+
     Wait(250)
     DoScreenFadeIn(650)
+end
+
+local function ensureFadeIn()
+    if IsScreenFadedOut() or IsScreenFadingOut() then
+        DoScreenFadeIn(650)
+    end
 end
 
 local function requestModel(model)
@@ -172,9 +191,21 @@ local function openManagementMenu()
                 icon = 'door-open',
                 onSelect = function()
                     if isBlocked() then return notify('در حالت مرگ نمی‌توانید وارد شوید.', 'error') end
-                    DoScreenFadeOut(650)
-                    while not IsScreenFadedOut() do Wait(0) end
+                    if pendingEnter then return notify('در حال ورود به مزرعه هستید...', 'inform') end
+
+                    -- Do not fade out before the server confirms access. If the server has an
+                    -- error or rejects the request, the player will no longer get stuck on a
+                    -- black/loading screen. The actual fade/teleport happens in enteredFarm.
+                    pendingEnter = true
                     TriggerServerEvent('amirok_farming:enterFarm', farm.uuid)
+
+                    SetTimeout(8000, function()
+                        if pendingEnter then
+                            pendingEnter = false
+                            ensureFadeIn()
+                            notify('ورود به مزرعه پاسخ نداد. لطفاً دوباره تلاش کنید.', 'error')
+                        end
+                    end)
                 end
             }
 
@@ -312,9 +343,17 @@ CreateThread(function()
                 drawText3D(Config.Farm.exit + vector3(0, 0, 0.55), '[E] خروج از مزرعه')
                 if IsControlJustReleased(0, 38) then
                     if isBlocked() then notify('در حالت مرگ نمی‌توانید خارج شوید.', 'error') else
-                        DoScreenFadeOut(650)
-                        while not IsScreenFadedOut() do Wait(0) end
-                        TriggerServerEvent('amirok_farming:exitFarm')
+                        if not pendingExit then
+                            pendingExit = true
+                            TriggerServerEvent('amirok_farming:exitFarm')
+                            SetTimeout(8000, function()
+                                if pendingExit then
+                                    pendingExit = false
+                                    ensureFadeIn()
+                                    notify('خروج از مزرعه پاسخ نداد. لطفاً دوباره تلاش کنید.', 'error')
+                                end
+                            end)
+                        end
                     end
                 end
             end
@@ -345,17 +384,23 @@ CreateThread(function()
 end)
 
 RegisterNetEvent('amirok_farming:enteredFarm', function(farm, plants)
+    pendingEnter = false
+    insideFarm = false
     currentFarm = farm
-    insideFarm = true
+    deleteProps()
     fadeTeleport(Config.Farm.spawn)
+    insideFarm = true
     rebuildPlants(plants)
 end)
 
-RegisterNetEvent('amirok_farming:enterDenied', function()
-    if IsScreenFadedOut() then DoScreenFadeIn(650) end
+RegisterNetEvent('amirok_farming:enterDenied', function(message)
+    pendingEnter = false
+    ensureFadeIn()
+    if message then notify(message, 'error') end
 end)
 
 RegisterNetEvent('amirok_farming:exitedFarm', function()
+    pendingExit = false
     insideFarm = false
     currentFarm = nil
     currentPlants = {}
