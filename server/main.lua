@@ -1,6 +1,7 @@
 AddEventHandler('onResourceStart', function(resource)
     if resource ~= GetCurrentResourceName() then return end
     math.randomseed(os.time())
+    OKGangs.Server.EnsureSchema()
     OKGangs.Server.LoadCache()
     OKGangs.Server.RegisterAllInventories()
     OKGangs.Server.ExpireOldGangs()

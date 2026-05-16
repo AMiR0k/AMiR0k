@@ -4,6 +4,32 @@ OKGangs.Server.Gangs = {}
 OKGangs.Server.Members = {}
 OKGangs.Server.ByName = {}
 
+
+local function columnExists(tableName, columnName)
+    local count = MySQL.scalar.await('SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?', { tableName, columnName })
+    return tonumber(count) and tonumber(count) > 0
+end
+
+local function addColumnIfMissing(tableName, columnName, definition)
+    if columnExists(tableName, columnName) then return true end
+
+    local ok, err = pcall(function()
+        MySQL.query.await(('ALTER TABLE `%s` ADD COLUMN `%s` %s'):format(tableName, columnName, definition))
+    end)
+
+    if ok then
+        print(('[OK_GANGS] Added missing SQL column %s.%s'):format(tableName, columnName))
+        return true
+    end
+
+    print(('[OK_GANGS] Failed to add missing SQL column %s.%s: %s'):format(tableName, columnName, tostring(err)))
+    return false
+end
+
+function OKGangs.Server.EnsureSchema()
+    addColumnIfMissing('gang_members', 'name', "VARCHAR(100) NOT NULL DEFAULT '' AFTER `identifier`")
+end
+
 local function safeJsonDecode(value)
     if not value or value == '' then return nil end
     local ok, decoded = pcall(json.decode, value)
