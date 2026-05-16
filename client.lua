@@ -188,21 +188,14 @@ local function showKeyMenu(data)
     lib.showContext('amirok_farm_keys')
 end
 
-local function openManagementMenu()
-    if isBlocked() then return notify('در حالت مرگ نمی‌توانید منو را باز کنید.', 'error') end
+local function openFarmActions(contextId, title, farmData)
+    local farm = farmData and farmData.farm
+    if not farm then return notify('اطلاعات این زمین پیدا نشد.', 'error') end
 
-    local data = lib.callback.await('amirok_farming:getMenuData', false)
     local options = {}
 
-    if not data or not data.hasFarm then
-        options[#options + 1] = {
-            title = ('خرید زمین - $%s'):format(Config.PurchasePrice),
-            icon = 'seedling',
-            onSelect = function() TriggerServerEvent('amirok_farming:buyFarm') end
-        }
-    else
-        local farm = data.farm
-        if data.expired then
+    if farmData.expired then
+        if farmData.role == 'owner' then
             options[#options + 1] = {
                 title = ('تمدید زمین - $%s'):format(Config.PurchasePrice),
                 description = 'زمان مالکیت تمام شده و کلید بازیکن دوم حذف می‌شود.',
@@ -211,42 +204,102 @@ local function openManagementMenu()
             }
         else
             options[#options + 1] = {
-                title = 'مشاهده انبار',
-                description = ('ظرفیت: %s کیلو'):format(farm.stash_capacity),
-                icon = 'box-open',
-                onSelect = function() openStash(farm) end
+                title = 'دسترسی غیرفعال است',
+                description = 'زمان مالکیت صاحب اصلی تمام شده است.',
+                icon = 'lock',
+                disabled = true
             }
-
-            options[#options + 1] = {
-                title = 'ورود به مزرعه',
-                icon = 'door-open',
-                onSelect = function()
-                    requestEnterFarm(farm.uuid)
-                end
-            }
-
-            if data.role == 'owner' then
-                options[#options + 1] = {
-                    title = 'مدیریت کلید',
-                    description = 'دادن یا لغو دسترسی یک بازیکن دیگر',
-                    icon = 'key',
-                    onSelect = function() showKeyMenu(data) end
-                }
-
-                if tonumber(farm.stash_capacity) < Config.UpgradedStorageKg then
-                    options[#options + 1] = {
-                        title = ('ارتقای انبار به %s کیلو - $%s'):format(Config.UpgradedStorageKg, Config.StorageUpgradePrice),
-                        icon = 'angles-up',
-                        onSelect = function() TriggerServerEvent('amirok_farming:upgradeStorage') end
-                    }
-                end
-            end
         end
+    else
+        options[#options + 1] = {
+            title = 'مشاهده انبار',
+            description = ('ظرفیت: %s کیلو'):format(farm.stash_capacity),
+            icon = 'box-open',
+            onSelect = function() openStash(farm) end
+        }
 
         options[#options + 1] = {
-            title = 'اطلاعات زمین',
-            description = ('زمان باقی‌مانده: %s | ظرفیت انبار: %s کیلو | نقش: %s'):format(FarmUtils.formatSeconds(data.remaining), farm.stash_capacity, data.role),
-            icon = 'circle-info',
+            title = 'ورود به مزرعه',
+            description = farmData.role == 'owner' and 'ورود به زمین شخصی شما' or 'ورود با کلید بازیکن دیگر',
+            icon = 'door-open',
+            onSelect = function()
+                requestEnterFarm(farm.uuid)
+            end
+        }
+
+        if farmData.role == 'owner' then
+            options[#options + 1] = {
+                title = 'مدیریت کلید',
+                description = 'دادن یا لغو دسترسی یک بازیکن دیگر',
+                icon = 'key',
+                onSelect = function() showKeyMenu(farmData) end
+            }
+
+            if tonumber(farm.stash_capacity) < Config.UpgradedStorageKg then
+                options[#options + 1] = {
+                    title = ('ارتقای انبار به %s کیلو - $%s'):format(Config.UpgradedStorageKg, Config.StorageUpgradePrice),
+                    icon = 'angles-up',
+                    onSelect = function() TriggerServerEvent('amirok_farming:upgradeStorage') end
+                }
+            end
+        end
+    end
+
+    options[#options + 1] = {
+        title = 'اطلاعات زمین',
+        description = ('زمان باقی‌مانده: %s | ظرفیت انبار: %s کیلو | نقش: %s'):format(FarmUtils.formatSeconds(farmData.remaining), farm.stash_capacity, farmData.role),
+        icon = 'circle-info',
+        disabled = true
+    }
+
+    options[#options + 1] = {
+        title = 'بازگشت',
+        icon = 'arrow-left',
+        menu = 'amirok_farm_management'
+    }
+
+    lib.registerContext({ id = contextId, title = title, menu = 'amirok_farm_management', options = options })
+    lib.showContext(contextId)
+end
+
+local function openManagementMenu()
+    if isBlocked() then return notify('در حالت مرگ نمی‌توانید منو را باز کنید.', 'error') end
+
+    local data = lib.callback.await('amirok_farming:getMenuData', false)
+    local options = {}
+
+    if not data then
+        options[#options + 1] = { title = 'اطلاعات زمین دریافت نشد.', icon = 'triangle-exclamation', disabled = true }
+    end
+
+    if not data or not data.hasOwnedFarm then
+        options[#options + 1] = {
+            title = ('خرید زمین شخصی - $%s'):format(Config.PurchasePrice),
+            description = 'هر بازیکن فقط می‌تواند یک زمین شخصی داشته باشد.',
+            icon = 'seedling',
+            onSelect = function() TriggerServerEvent('amirok_farming:buyFarm') end
+        }
+    else
+        options[#options + 1] = {
+            title = 'زمین شخصی من',
+            description = ('Slot #%s | %s'):format(data.owned.farm.farm_slot, data.owned.expired and 'نیاز به تمدید' or ('باقی‌مانده: ' .. FarmUtils.formatSeconds(data.owned.remaining))),
+            icon = 'house-chimney',
+            onSelect = function() openFarmActions('amirok_owned_farm_menu', 'زمین شخصی من', data.owned) end
+        }
+    end
+
+    if data and data.hasKeyFarm then
+        options[#options + 1] = {
+            title = 'زمینی که کلیدش را دارم',
+            description = ('Slot #%s | صاحب: %s | باقی‌مانده: %s'):format(data.key.farm.farm_slot, data.key.farm.owner_identifier, FarmUtils.formatSeconds(data.key.remaining)),
+            icon = 'key',
+            onSelect = function() openFarmActions('amirok_key_farm_menu', 'زمین کلیددار', data.key) end
+        }
+    else
+        options[#options + 1] = {
+            title = 'زمینی که کلیدش را دارم',
+            description = 'در حال حاضر کلید هیچ زمین فعالی را ندارید.',
+            icon = 'key',
             disabled = true
         }
     end

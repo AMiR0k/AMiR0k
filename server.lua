@@ -280,25 +280,25 @@ lib.callback.register('amirok_farming:getMenuData', function(source)
     local identifier = getIdentifier(source)
     if not identifier then return { hasFarm = false } end
 
-    local farm = farmByOwner(identifier)
+    local ownedFarm = farmByOwner(identifier)
     local keyFarm = farmByAccess(identifier)
+    local ownedData = nil
+    local keyData = nil
 
-    if farm then
-        registerFarmStash(farm)
-        return {
-            hasFarm = true,
+    if ownedFarm then
+        registerFarmStash(ownedFarm)
+        ownedData = {
             role = 'owner',
-            expired = isExpired(farm),
-            farm = farm,
-            remaining = math.max(0, tonumber(farm.expires_at) - now()),
-            hasKeyholder = MySQL.scalar.await('SELECT identifier FROM farm_access WHERE farm_uuid = ? LIMIT 1', { farm.uuid })
+            expired = isExpired(ownedFarm),
+            farm = ownedFarm,
+            remaining = math.max(0, tonumber(ownedFarm.expires_at) - now()),
+            hasKeyholder = MySQL.scalar.await('SELECT identifier FROM farm_access WHERE farm_uuid = ? LIMIT 1', { ownedFarm.uuid })
         }
     end
 
     if keyFarm then
         registerFarmStash(keyFarm)
-        return {
-            hasFarm = true,
+        keyData = {
             role = 'keyholder',
             expired = false,
             farm = keyFarm,
@@ -306,7 +306,20 @@ lib.callback.register('amirok_farming:getMenuData', function(source)
         }
     end
 
-    return { hasFarm = false }
+    return {
+        hasFarm = ownedData ~= nil or keyData ~= nil,
+        hasOwnedFarm = ownedData ~= nil,
+        hasKeyFarm = keyData ~= nil,
+        owned = ownedData,
+        key = keyData,
+
+        -- Compatibility fields for any third-party code still reading the old shape.
+        role = ownedData and ownedData.role or (keyData and keyData.role or nil),
+        expired = ownedData and ownedData.expired or (keyData and keyData.expired or nil),
+        farm = ownedData and ownedData.farm or (keyData and keyData.farm or nil),
+        remaining = ownedData and ownedData.remaining or (keyData and keyData.remaining or 0),
+        hasKeyholder = ownedData and ownedData.hasKeyholder or nil
+    }
 end)
 
 lib.callback.register('amirok_farming:getSeeds', function(source)
