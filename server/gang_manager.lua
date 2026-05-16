@@ -131,7 +131,13 @@ function OKGangs.Server.AdminSetPlayerGang(source, target, gangName, rank)
 
     local gang = OKGangs.Server.GetGang(OKGangs.Slug(gangName or ''))
     if not gang then return false, OKGangs.Errors.invalid_gang end
-    if gang.status ~= 1 then return false, OKGangs.Errors.gang_inactive end
+
+    local restoredGang = false
+    if gang.status ~= 1 then
+        restoredGang = true
+        MySQL.update.await('UPDATE gangs SET status = 1, deleted_at = NULL, expires_at = IF(expires_at IS NULL OR expires_at < NOW(), DATE_ADD(NOW(), INTERVAL ? DAY), expires_at) WHERE id = ?', { Config.DefaultExpireDays, gang.id })
+        gang.status = 1
+    end
 
     rank = math.max(1, math.min(Config.BossRank, tonumber(rank) or 1))
     if not gang.ranks[rank] then return false, 'invalid rank' end
@@ -152,7 +158,7 @@ function OKGangs.Server.AdminSetPlayerGang(source, target, gangName, rank)
     OKGangs.Server.LoadCache()
     local refreshedGang = OKGangs.Server.GetGang(gang.name)
     local refreshedMember = OKGangs.Server.GetMember(xTarget.identifier)
-    OKGangs.Server.Audit(refreshedGang.id, source, 'Admin Set Gang', { target = target, identifier = xTarget.identifier, gang = refreshedGang.name, rank = rank })
+    OKGangs.Server.Audit(refreshedGang.id, source, 'Admin Set Gang', { target = target, identifier = xTarget.identifier, gang = refreshedGang.name, rank = rank, restored = restoredGang })
     TriggerClientEvent('ok_gangs:client:playerGang', target, publicGang(refreshedGang), refreshedMember)
     TriggerClientEvent('ok_gangs:client:syncGangs', -1, OKGangs.Server.GetAllPublicGangs())
 

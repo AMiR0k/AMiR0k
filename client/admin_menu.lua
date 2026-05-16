@@ -8,7 +8,20 @@ local function currentCoords()
 end
 
 local function notifyResult(ok, result)
-    lib.notify({ title = 'OK_GANGS', description = ok and 'Saved successfully' or tostring(result or 'failed'), type = ok and 'success' or 'error' })
+    local description = ok and tostring(result or 'Saved successfully') or tostring(result or 'failed')
+    lib.notify({ title = 'OK_GANGS', description = description, type = ok and 'success' or 'error' })
+end
+
+
+local function setPlayerGangByName()
+    local input = lib.inputDialog('Set Player Gang', {
+        { type = 'number', label = 'Player ID', required = true, min = 1 },
+        { type = 'input', label = 'Gang Name', required = true },
+        { type = 'number', label = 'Rank (1-6)', default = 1, min = 1, max = Config.BossRank }
+    })
+    if not input then return end
+    local ok, result = lib.callback.await('ok_gangs:server:adminSetPlayerGang', false, input[1], input[2], input[3] or 1)
+    notifyResult(ok, ok and ('Player added to %s'):format(result.gang.label) or result)
 end
 
 local function createGang()
@@ -20,6 +33,17 @@ local function createGang()
     if not input then return end
     local ok, result = lib.callback.await('ok_gangs:server:createGang', false, { name = input[1], label = input[2], days = input[3], hq = currentCoords() })
     notifyResult(ok, type(result) == 'table' and result.label or result)
+end
+
+
+local function setPlayerGang(gang)
+    local input = lib.inputDialog(('Set Gang: %s'):format(gang.label), {
+        { type = 'number', label = 'Player ID', required = true, min = 1 },
+        { type = 'number', label = 'Rank (1-6)', default = 1, min = 1, max = Config.BossRank }
+    })
+    if not input then return end
+    local ok, result = lib.callback.await('ok_gangs:server:adminSetPlayerGang', false, input[1], gang.name, input[2] or 1)
+    notifyResult(ok, ok and ('Player added to %s'):format(result.gang.label) or result)
 end
 
 local function setGangLocation(gang)
@@ -44,7 +68,8 @@ local function editGang(gang)
             { value = 'xp', label = 'Set XP' },
             { value = 'money', label = 'Set Money' },
             { value = 'member_slots', label = 'Change Member Slots' },
-            { value = 'locations', label = 'Gang Settings / Locations' }
+            { value = 'locations', label = 'Gang Settings / Locations' },
+            { value = 'set_player_gang', label = 'Set Player Gang' }
         } },
         { type = 'number', label = 'Value', default = 1 }
     })
@@ -55,6 +80,7 @@ local function editGang(gang)
     elseif action == 'restore' then ok, result = lib.callback.await('ok_gangs:server:setGangStatus', false, gang.id, true)
     elseif action == 'extend' then ok, result = lib.callback.await('ok_gangs:server:extendGang', false, gang.id, value)
     elseif action == 'locations' then setGangLocation(gang) return
+    elseif action == 'set_player_gang' then setPlayerGang(gang) return
     else ok, result = lib.callback.await('ok_gangs:server:updateGangField', false, gang.id, action, value) end
     notifyResult(ok, result)
 end
@@ -72,6 +98,7 @@ end
 RegisterNetEvent('ok_gangs:client:openAdminMenu', function()
     lib.registerContext({ id = 'ok_gangs_admin', title = 'Gang Administration', options = {
         { title = 'Create Gang', onSelect = createGang },
+        { title = 'Set Player Gang', description = '/setgang menu shortcut', onSelect = setPlayerGangByName },
         { title = 'Manage Gangs', onSelect = manageGangs }
     } })
     lib.showContext('ok_gangs_admin')

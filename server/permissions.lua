@@ -6,9 +6,10 @@ function OKGangs.Server.IsAdmin(source)
     local xPlayer = ESX.GetPlayerFromId(source)
     if not xPlayer then return false end
     local group = xPlayer.getGroup and xPlayer.getGroup() or 'user'
+    if group == 'admin' or group == 'superadmin' or group == 'god' or group == 'owner' then return true end
+
     local level = tonumber(group) or tonumber(xPlayer.get and xPlayer.get('adminLevel')) or tonumber(xPlayer.get and xPlayer.get('permission_level')) or 0
-    if level >= Config.AdminLevel then return true end
-    return group == 'superadmin' or group == 'admin' and Config.AdminLevel <= 1
+    return level >= Config.AdminLevel
 end
 
 function OKGangs.Server.RequireAdmin(source)

@@ -6,6 +6,7 @@ lib.callback.register('ok_gangs:server:setGangStatus', function(source, gangId, 
 lib.callback.register('ok_gangs:server:updateGangField', function(source, gangId, field, value) return OKGangs.Server.UpdateGangField(source, gangId, field, value) end)
 lib.callback.register('ok_gangs:server:extendGang', function(source, gangId, days) return OKGangs.Server.ExtendGang(source, gangId, days) end)
 lib.callback.register('ok_gangs:server:setLocation', function(source, gangId, locationType, coords) return OKGangs.Server.SetLocation(source, gangId, locationType, coords) end)
+lib.callback.register('ok_gangs:server:adminSetPlayerGang', function(source, target, gangName, rank) return OKGangs.Server.AdminSetPlayerGang(source, target, gangName, rank) end)
 lib.callback.register('ok_gangs:server:addMember', function(source, target, gangId, rank)
     if not OKGangs.Server.IsAdmin(source) then
         local isBoss, gang = OKGangs.Server.IsBoss(source)
