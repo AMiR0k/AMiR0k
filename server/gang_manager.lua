@@ -119,6 +119,46 @@ function OKGangs.Server.AddMember(source, target, gangId, rank)
     return true
 end
 
+
+function OKGangs.Server.AdminSetPlayerGang(source, target, gangName, rank)
+    if not OKGangs.Server.RequireAdmin(source) then return false, OKGangs.Errors.no_permission end
+
+    target = tonumber(target)
+    if not target then return false, 'invalid player id' end
+
+    local xTarget = ESX.GetPlayerFromId(target)
+    if not xTarget then return false, 'player not online' end
+
+    local gang = OKGangs.Server.GetGang(OKGangs.Slug(gangName or ''))
+    if not gang then return false, OKGangs.Errors.invalid_gang end
+    if gang.status ~= 1 then return false, OKGangs.Errors.gang_inactive end
+
+    rank = math.max(1, math.min(Config.BossRank, tonumber(rank) or 1))
+    if not gang.ranks[rank] then return false, 'invalid rank' end
+
+    local oldMember = OKGangs.Server.GetMember(xTarget.identifier)
+    local movingFromAnotherGang = oldMember and tonumber(oldMember.gang_id) ~= tonumber(gang.id)
+    if (not oldMember or movingFromAnotherGang) and OKGangs.TableCount(gang.members) >= gang.member_slots then
+        return false, OKGangs.Errors.gang_full
+    end
+
+    if oldMember then
+        MySQL.update.await('UPDATE gang_members SET gang_id = ?, name = ?, rank = ? WHERE identifier = ?', { gang.id, xTarget.getName(), rank, xTarget.identifier })
+        OKGangs.Server.Audit(oldMember.gang_id, source, 'Admin Set Gang', { target = target, identifier = xTarget.identifier, old_gang_id = oldMember.gang_id, new_gang_id = gang.id, rank = rank })
+    else
+        MySQL.insert.await('INSERT INTO gang_members (gang_id, identifier, name, rank) VALUES (?, ?, ?, ?)', { gang.id, xTarget.identifier, xTarget.getName(), rank })
+    end
+
+    OKGangs.Server.LoadCache()
+    local refreshedGang = OKGangs.Server.GetGang(gang.name)
+    local refreshedMember = OKGangs.Server.GetMember(xTarget.identifier)
+    OKGangs.Server.Audit(refreshedGang.id, source, 'Admin Set Gang', { target = target, identifier = xTarget.identifier, gang = refreshedGang.name, rank = rank })
+    TriggerClientEvent('ok_gangs:client:playerGang', target, publicGang(refreshedGang), refreshedMember)
+    TriggerClientEvent('ok_gangs:client:syncGangs', -1, OKGangs.Server.GetAllPublicGangs())
+
+    return true, { gang = publicGang(refreshedGang), member = refreshedMember, rank = rank }
+end
+
 function OKGangs.Server.RemoveMember(source, identifier)
     local member = OKGangs.Server.Members[identifier]
     if not member then return false end
