@@ -47,7 +47,7 @@ function Security.ValidateAnimal(source, netId, animalId, coords, requireDead)
     end
     local entity = NetworkGetEntityFromNetworkId(netId)
     if entity ~= 0 and DoesEntityExist(entity) then
-        if requireDead and not IsEntityDead(entity) then return Security.Fail(source, 'animal_not_dead', {netId = netId}) end
+        if requireDead and GetEntityHealth(entity) > 0 then return Security.Fail(source, 'animal_not_dead', {netId = netId}) end
         local pedCoords = GetEntityCoords(GetPlayerPed(source))
         local entityCoords = GetEntityCoords(entity)
         if #(pedCoords - entityCoords) > Config.Security.maxActionDistance then

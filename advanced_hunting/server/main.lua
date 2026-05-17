@@ -29,7 +29,7 @@ RegisterNetEvent('advanced_hunting:server:registerAnimal', function(netId, anima
     for registeredNetId, record in pairs(AdvancedHunting.ServerState.animals) do
         if record.owner == source and record.zoneId == zoneId then
             local entity = NetworkGetEntityFromNetworkId(registeredNetId)
-            if entity ~= 0 and DoesEntityExist(entity) and not IsEntityDead(entity) then
+            if entity ~= 0 and DoesEntityExist(entity) and GetEntityHealth(entity) > 0 then
                 count = count + 1
             end
         end
