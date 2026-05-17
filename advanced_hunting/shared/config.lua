@@ -9,8 +9,7 @@ Config.Framework = {
 }
 
 Config.Inventory = {
-    resource = 'ox_inventory',
-    knifeItem = 'hunting_knife'
+    resource = 'ox_inventory'
 }
 
 Config.Security = {
@@ -39,7 +38,6 @@ Config.Skinning = {
     skillCheck = {'easy', 'medium', 'medium'},
     qualityOnFailPenalty = 1,
     failMeatMultiplier = 0.45,
-    requiredItem = 'hunting_knife',
     -- Skinning accepts every configured knife/axe both by hash and by name.
     -- Add custom knife models here and in allowedKnifeNames if your server has them.
     allowedKnives = {

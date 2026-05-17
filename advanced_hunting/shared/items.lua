@@ -14,6 +14,5 @@ HuntingItems = {
     panther_fur = {label = 'Panther Fur', weight = 1150, stack = true, close = true, description = 'Dark rare fur for illegal collectors.', image = 'panther_fur.png'},
     deer_carcass = {label = 'Deer Carcass', weight = 12000, stack = false, close = true, description = 'A field-dressed deer carcass.', image = 'deer_carcass.png'},
     cow_carcass = {label = 'Cow Carcass', weight = 18000, stack = false, close = true, description = 'A heavy cow carcass ready for butchering.', image = 'cow_carcass.png'},
-    boar_carcass = {label = 'Boar Carcass', weight = 14000, stack = false, close = true, description = 'A wild boar carcass ready for butchering.', image = 'boar_carcass.png'},
-    hunting_knife = {label = 'Hunting Knife', weight = 700, stack = false, close = true, description = 'Required tool for clean skinning.', image = 'hunting_knife.png'}
+    boar_carcass = {label = 'Boar Carcass', weight = 14000, stack = false, close = true, description = 'A wild boar carcass ready for butchering.', image = 'boar_carcass.png'}
 }

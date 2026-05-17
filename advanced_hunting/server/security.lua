@@ -31,11 +31,6 @@ function Security.ValidateKnife(source, weaponHash)
     if not AdvancedHunting.Utils.IsAllowedSkinningWeapon(selected) and not AdvancedHunting.Utils.IsAllowedSkinningWeapon(weaponHash) then
         return Security.Fail(source, 'invalid_skinning_weapon', {selected = selected, sent = weaponHash})
     end
-    local count = exports[Config.Inventory.resource]:Search(source, 'count', Config.Skinning.requiredItem)
-    if not count or count < 1 then
-        TriggerClientEvent('ox_lib:notify', source, {description = _L('need_knife_item'), type = 'error'})
-        return false
-    end
     return true
 end
 

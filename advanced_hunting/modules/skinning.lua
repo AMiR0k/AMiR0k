@@ -43,9 +43,6 @@ function Skinning.Start(entity, netId, animalId)
     local allowed = Skinning.HasAllowedWeapon()
     if not allowed then return AdvancedHunting.Utils.Notify(_L('need_knife_weapon'), 'error') end
 
-    local hasKnife = lib.callback.await('advanced_hunting:server:hasKnife', false)
-    if not hasKnife then return AdvancedHunting.Utils.Notify(_L('need_knife_item'), 'error') end
-
     if not lib.skillCheck(Config.Skinning.skillCheck, {'w', 'a', 's', 'd'}) then
         AdvancedHunting.Utils.Notify(_L('skinning_failed'), 'warning')
         Skinning.Finish(entity, netId, animalId, false)

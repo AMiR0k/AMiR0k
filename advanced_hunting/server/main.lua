@@ -42,11 +42,6 @@ RegisterNetEvent('advanced_hunting:server:unregisterAnimal', function(netId)
     end
 end)
 
-lib.callback.register('advanced_hunting:server:hasKnife', function(source)
-    local count = exports[Config.Inventory.resource]:Search(source, 'count', Config.Skinning.requiredItem)
-    return count and count > 0
-end)
-
 RegisterNetEvent('advanced_hunting:server:skinAnimal', function(netId, animalId, coords, clientQuality, skillSuccess, weaponHash)
     local source = source
     if AdvancedHunting.AntiAbuse.IsOnCooldown(('skin:%s'):format(source), Config.Security.actionCooldown) then return end
