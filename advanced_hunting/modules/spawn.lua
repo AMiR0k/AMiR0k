@@ -23,11 +23,20 @@ local function randomPointInZone(zone)
     return vector3(x, y, found and groundZ or zone.center.z)
 end
 
-function Spawn.CountZone(zoneId)
+function Spawn.CountZone(zoneId, aliveOnly)
     local count = 0
-    for _, data in pairs(Spawn.spawned) do
-        if data.zoneId == zoneId and DoesEntityExist(data.entity) then count = count + 1 end
+
+    for netId, data in pairs(Spawn.spawned) do
+        if data.zoneId == zoneId then
+            if not DoesEntityExist(data.entity) then
+                TriggerServerEvent('advanced_hunting:server:unregisterAnimal', netId)
+                Spawn.spawned[netId] = nil
+            elseif not aliveOnly or not IsEntityDead(data.entity) then
+                count = count + 1
+            end
+        end
     end
+
     return count
 end
 
@@ -48,16 +57,10 @@ function Spawn.CleanupZone(zoneId)
     end
 end
 
-function Spawn.TrySpawn(zoneId, zone)
-    if not Config.Spawn.enabled then return end
-    if Spawn.CountZone(zoneId) >= (zone.maxAnimals or 5) then return end
-    local now = GetGameTimer()
-    if (Spawn.zoneCooldowns[zoneId] or 0) > now then return end
-    Spawn.zoneCooldowns[zoneId] = now + (zone.respawnTime or Config.Spawn.spawnCooldown)
-
+local function spawnAnimal(zoneId, zone)
     local animalId = AdvancedHunting.Utils.WeightedAnimalForZone(zone)
     local animal = animalId and AdvancedHunting.Utils.GetAnimalConfig(animalId)
-    if not animal or not requestModel(animal.model) then return end
+    if not animal or not requestModel(animal.model) then return false end
 
     local playerCoords = GetEntityCoords(PlayerPedId())
     local spawnCoords
@@ -68,10 +71,10 @@ function Spawn.TrySpawn(zoneId, zone)
             break
         end
     end
-    if not spawnCoords then return end
+    if not spawnCoords then return false end
 
     local ped = CreatePed(28, animal.model, spawnCoords.x, spawnCoords.y, spawnCoords.z, math.random(0, 359) + 0.0, true, true)
-    if not DoesEntityExist(ped) then return end
+    if not DoesEntityExist(ped) then return false end
 
     SetEntityAsMissionEntity(ped, true, true)
     SetEntityHealth(ped, animal.health or 100)
@@ -87,4 +90,30 @@ function Spawn.TrySpawn(zoneId, zone)
     Spawn.spawned[netId] = {entity = ped, animalId = animalId, zoneId = zoneId, skinned = false}
     TriggerServerEvent('advanced_hunting:server:registerAnimal', netId, animalId, zoneId, GetEntityCoords(ped))
     TriggerEvent('advanced_hunting:client:addAnimalTarget', ped, netId, animalId)
+    return true
+end
+
+function Spawn.TrySpawn(zoneId, zone)
+    if not Config.Spawn.enabled then return end
+
+    local maxAnimals = zone.maxAnimals or 5
+    local aliveCount = Spawn.CountZone(zoneId, true)
+    if aliveCount >= maxAnimals then return end
+
+    local now = GetGameTimer()
+    if (Spawn.zoneCooldowns[zoneId] or 0) > now then return end
+
+    local spawned = spawnAnimal(zoneId, zone)
+    local delay
+    if spawned and (aliveCount + 1) < maxAnimals then
+        -- Refill the zone quickly on hunt start instead of waiting the full respawn time
+        -- after the first animal. Full respawn cooldown is only used once the zone is full.
+        delay = Config.Spawn.refillDelay or Config.Spawn.retryDelay
+    elseif spawned then
+        delay = zone.respawnTime or Config.Spawn.spawnCooldown
+    else
+        delay = Config.Spawn.retryDelay
+    end
+
+    Spawn.zoneCooldowns[zoneId] = now + delay
 end

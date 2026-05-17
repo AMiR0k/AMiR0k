@@ -26,8 +26,13 @@ RegisterNetEvent('advanced_hunting:server:registerAnimal', function(netId, anima
         return AdvancedHunting.Security.Fail(source, 'register_invalid_animal', {animalId = animalId, zoneId = zoneId})
     end
     local count = 0
-    for _, record in pairs(AdvancedHunting.ServerState.animals) do
-        if record.owner == source and record.zoneId == zoneId then count = count + 1 end
+    for registeredNetId, record in pairs(AdvancedHunting.ServerState.animals) do
+        if record.owner == source and record.zoneId == zoneId then
+            local entity = NetworkGetEntityFromNetworkId(registeredNetId)
+            if entity ~= 0 and DoesEntityExist(entity) and not IsEntityDead(entity) then
+                count = count + 1
+            end
+        end
     end
     if count >= (zone.maxAnimals or 5) then return AdvancedHunting.Security.Fail(source, 'zone_spawn_limit', {zoneId = zoneId}) end
     AdvancedHunting.ServerState.animals[netId] = {owner = source, animalId = animalId, zoneId = zoneId, createdAt = os.time()}

@@ -24,7 +24,7 @@ function Zones.Monitor()
                 if zoneId then AdvancedHunting.Utils.Notify(_L('enter_zone', zone.name), 'inform') end
             end
 
-            if AdvancedHunting.State.active and zoneId and #(coords - zone.center) <= Config.Spawn.spawnDistance then
+            if AdvancedHunting.State.active and zoneId then
                 AdvancedHunting.Spawn.TrySpawn(zoneId, zone)
             end
 

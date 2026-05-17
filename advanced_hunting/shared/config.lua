@@ -27,6 +27,7 @@ Config.Spawn = {
     spawnDistance = 120.0,
     despawnDistance = 340.0,
     spawnCooldown = 45000,
+    refillDelay = 2500,
     retryDelay = 2500,
     groundProbeHeight = 80.0,
     minPlayerDistance = 45.0,
