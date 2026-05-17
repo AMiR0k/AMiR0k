@@ -74,6 +74,35 @@ function Utils.WeightedAnimalForZone(zone)
     return pool[#pool].id
 end
 
+function Utils.IsAllowedSkinningWeapon(weapon)
+    if not weapon or weapon == 0 then return false end
+
+    -- Accept direct hash keys from Config.Skinning.allowedKnives.
+    if Config.Skinning.allowedKnives and Config.Skinning.allowedKnives[weapon] then
+        return true
+    end
+
+    -- Accept weapon names too, then resolve them to hashes. This keeps every knife/axe
+    -- model configurable and prevents client/server hash format mismatches from
+    -- blocking valid skinning weapons.
+    if type(weapon) == 'string' then
+        if Config.Skinning.allowedKnifeNames and Config.Skinning.allowedKnifeNames[weapon] then
+            return true
+        end
+
+        local hash = GetHashKey(weapon)
+        return Config.Skinning.allowedKnives and Config.Skinning.allowedKnives[hash] == true
+    end
+
+    for weaponName, enabled in pairs(Config.Skinning.allowedKnifeNames or {}) do
+        if enabled and GetHashKey(weaponName) == weapon then
+            return true
+        end
+    end
+
+    return false
+end
+
 function Utils.ClampQualityIndex(index)
     return math.max(1, math.min(#Config.Quality.order, index))
 end

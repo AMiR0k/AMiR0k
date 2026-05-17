@@ -4,8 +4,19 @@ AdvancedHunting.Skinning = AdvancedHunting.Skinning or {}
 local Skinning = AdvancedHunting.Skinning
 
 function Skinning.HasAllowedWeapon()
-    local weapon = GetSelectedPedWeapon(PlayerPedId())
-    return Config.Skinning.allowedKnives[weapon] == true, weapon
+    local ped = PlayerPedId()
+    local selected = GetSelectedPedWeapon(ped)
+    local _, current = GetCurrentPedWeapon(ped, true)
+
+    if AdvancedHunting.Utils.IsAllowedSkinningWeapon(selected) then
+        return true, selected
+    end
+
+    if AdvancedHunting.Utils.IsAllowedSkinningWeapon(current) then
+        return true, current
+    end
+
+    return false, selected
 end
 
 function Skinning.CalculateClientQuality(entity, skillSuccess)
@@ -51,6 +62,7 @@ end
 function Skinning.Finish(entity, netId, animalId, skillSuccess)
     local quality = Skinning.CalculateClientQuality(entity, skillSuccess)
     local coords = GetEntityCoords(entity)
-    TriggerServerEvent('advanced_hunting:server:skinAnimal', netId, animalId, coords, quality, skillSuccess, GetSelectedPedWeapon(PlayerPedId()))
+    local _, weapon = Skinning.HasAllowedWeapon()
+    TriggerServerEvent('advanced_hunting:server:skinAnimal', netId, animalId, coords, quality, skillSuccess, weapon)
     TriggerEvent('advanced_hunting:client:createCarcass', entity, netId, animalId)
 end

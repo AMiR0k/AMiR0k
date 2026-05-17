@@ -40,6 +40,8 @@ Config.Skinning = {
     qualityOnFailPenalty = 1,
     failMeatMultiplier = 0.45,
     requiredItem = 'hunting_knife',
+    -- Skinning accepts every configured knife/axe both by hash and by name.
+    -- Add custom knife models here and in allowedKnifeNames if your server has them.
     allowedKnives = {
         [`WEAPON_KNIFE`] = true,
         [`WEAPON_DAGGER`] = true,

@@ -28,7 +28,7 @@ end
 
 function Security.ValidateKnife(source, weaponHash)
     local selected = GetSelectedPedWeapon(GetPlayerPed(source))
-    if not Config.Skinning.allowedKnives[selected] and not Config.Skinning.allowedKnives[weaponHash] then
+    if not AdvancedHunting.Utils.IsAllowedSkinningWeapon(selected) and not AdvancedHunting.Utils.IsAllowedSkinningWeapon(weaponHash) then
         return Security.Fail(source, 'invalid_skinning_weapon', {selected = selected, sent = weaponHash})
     end
     local count = exports[Config.Inventory.resource]:Search(source, 'count', Config.Skinning.requiredItem)
