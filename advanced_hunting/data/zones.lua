@@ -10,6 +10,7 @@ HuntingZones = {
         legendaryChance = 0.8,
         blip = {
             enabled = true,
+            coords = vector3(-568.18, 5252.98, 70.49),
             sprite = 141,
             color = 25,
             scale = 0.85,

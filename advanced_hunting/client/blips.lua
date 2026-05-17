@@ -20,7 +20,8 @@ function Blips.CreateZoneBlips()
     for zoneId, zone in pairs(HuntingZones) do
         local data = zone.blip or Config.StartStop.blip
         if data and data.enabled then
-            Blips.created[#Blips.created + 1] = createBlip(zone.center, data)
+            local blipCoords = data.coords or zone.center
+            Blips.created[#Blips.created + 1] = createBlip(blipCoords, data)
             local radius = AddBlipForRadius(zone.center.x, zone.center.y, zone.center.z, zone.radius)
             SetBlipColour(radius, data.radiusColor or data.color)
             SetBlipAlpha(radius, data.radiusAlpha or 70)
