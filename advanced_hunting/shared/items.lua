@@ -12,6 +12,10 @@ HuntingItems = {
     wolf_pelt = {label = 'Wolf Pelt', weight = 900, stack = true, close = true, description = 'Valuable pelt from a dangerous predator.', image = 'wolf_pelt.png'},
     tiger_skin = {label = 'Tiger Skin', weight = 1200, stack = true, close = true, description = 'Extremely rare predator skin.', image = 'tiger_skin.png'},
     panther_fur = {label = 'Panther Fur', weight = 1150, stack = true, close = true, description = 'Dark rare fur for illegal collectors.', image = 'panther_fur.png'},
+    dog_hide = {label = 'Dog Hide', weight = 850, stack = true, close = true, description = 'A preserved hide from an aggressive wild dog.', image = 'dog_hide.png'},
+    dog_fur = {label = 'Dog Fur', weight = 650, stack = true, close = true, description = 'Fur prepared from a hunted canine.', image = 'dog_fur.png'},
+    lion_pelt = {label = 'Lion Pelt', weight = 1300, stack = true, close = true, description = 'A valuable mountain lion pelt.', image = 'lion_pelt.png'},
+    coyote_skin = {label = 'Coyote Skin', weight = 750, stack = true, close = true, description = 'A coyote skin used by rare pelt traders.', image = 'coyote_skin.png'},
     deer_carcass = {label = 'Deer Carcass', weight = 12000, stack = false, close = true, description = 'A field-dressed deer carcass.', image = 'deer_carcass.png'},
     cow_carcass = {label = 'Cow Carcass', weight = 18000, stack = false, close = true, description = 'A heavy cow carcass ready for butchering.', image = 'cow_carcass.png'},
     boar_carcass = {label = 'Boar Carcass', weight = 14000, stack = false, close = true, description = 'A wild boar carcass ready for butchering.', image = 'boar_carcass.png'}

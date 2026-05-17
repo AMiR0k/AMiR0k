@@ -129,6 +129,96 @@ Animals.Definitions = {
             skin = {item = 'panther_fur', amount = 1}
         }
     },
+    rottweiler = {
+        model = `a_c_rottweiler`,
+        label = 'Rottweiler',
+        aggressive = true,
+        health = 160,
+        spawnChance = 14,
+        spawnZones = {'paleto_sawmill'},
+        time = {day = true, night = true},
+        legendary = false,
+        xp = 24,
+        sellPrice = {skin = 140},
+        rewards = {
+            skin = {item = 'dog_hide', amount = 1}
+        }
+    },
+    husky = {
+        model = `a_c_husky`,
+        label = 'Husky',
+        aggressive = false,
+        health = 130,
+        spawnChance = 12,
+        spawnZones = {'paleto_sawmill'},
+        time = {day = true, night = true},
+        legendary = false,
+        xp = 20,
+        sellPrice = {skin = 120},
+        rewards = {
+            skin = {item = 'dog_fur', amount = 1}
+        }
+    },
+    pug = {
+        model = `a_c_pug`,
+        label = 'Pug',
+        aggressive = false,
+        health = 70,
+        spawnChance = 10,
+        spawnZones = {'paleto_sawmill'},
+        time = {day = true, night = true},
+        legendary = false,
+        xp = 8,
+        sellPrice = {skin = 60},
+        rewards = {
+            skin = {item = 'dog_fur', amount = 1}
+        }
+    },
+    retriever = {
+        model = `a_c_retriever`,
+        label = 'Retriever',
+        aggressive = false,
+        health = 120,
+        spawnChance = 11,
+        spawnZones = {'paleto_sawmill'},
+        time = {day = true, night = true},
+        legendary = false,
+        xp = 18,
+        sellPrice = {skin = 100},
+        rewards = {
+            skin = {item = 'dog_fur', amount = 1}
+        }
+    },
+    mountain_lion = {
+        model = `a_c_mtlion`,
+        label = 'Mountain Lion',
+        aggressive = true,
+        health = 260,
+        spawnChance = 4,
+        spawnZones = {'paleto_sawmill'},
+        time = {day = false, night = true},
+        legendary = false,
+        xp = 50,
+        sellPrice = {skin = 400},
+        rewards = {
+            skin = {item = 'lion_pelt', amount = 1}
+        }
+    },
+    coyote = {
+        model = `a_c_coyote`,
+        label = 'Coyote',
+        aggressive = true,
+        health = 100,
+        spawnChance = 15,
+        spawnZones = {'paleto_sawmill'},
+        time = {day = false, night = true},
+        legendary = false,
+        xp = 16,
+        sellPrice = {skin = 90},
+        rewards = {
+            skin = {item = 'coyote_skin', amount = 1}
+        }
+    },
     golden_deer = {
         model = `a_c_deer`,
         label = 'Golden Deer',
