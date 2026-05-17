@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS `advanced_hunting_xp` (
+    `identifier` VARCHAR(64) NOT NULL,
+    `level` INT NOT NULL DEFAULT 1,
+    `xp` INT NOT NULL DEFAULT 0,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`identifier`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
