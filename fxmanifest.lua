@@ -24,5 +24,5 @@ dependencies {
     'es_extended',
     'ox_lib',
     'ox_inventory',
-    'utk_hackdependency'
+    'utk_fingerprint'
 }

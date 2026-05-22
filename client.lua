@@ -56,9 +56,19 @@ local function canInteract(bankId, stage)
     return true
 end
 
+local function runFingerprintHack(levels, lifes, minutes)
+    local promiseObj = promise.new()
+
+    TriggerEvent('utk_fingerprint:Start', levels, lifes, minutes, function(success)
+        promiseObj:resolve(success == true)
+    end)
+
+    return Citizen.Await(promiseObj)
+end
+
 local function doHack(bankId)
     notify('inform', locale('hack_start'))
-    local ok = exports['utk_hackdependency']:OpenHackingGame(4, 25, 3)
+    local ok = runFingerprintHack(3, 5, 3)
     if not ok then
         notify('error', locale('hack_failed'))
         TriggerServerEvent(('%s:server:resetAttempt'):format(PREFIX), bankId)
