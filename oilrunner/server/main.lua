@@ -5,6 +5,7 @@ local function getPlayerState(source)
         active = false,
         depositPaid = false,
         tugNetId = nil,
+        previousJob = nil,
         hasOil = false,
         loading = false,
         loadingStartedAt = nil,
@@ -59,6 +60,39 @@ local function isRegisteredTugDriver(source, state, netId)
     return currentVehicle == vehicle and GetPedInVehicleSeat(vehicle, -1) == ped
 end
 
+local function getCurrentJob(xPlayer)
+    if not xPlayer or not xPlayer.job then return nil end
+
+    return {
+        name = xPlayer.job.name,
+        grade = xPlayer.job.grade or 0
+    }
+end
+
+local function setPlayerJob(xPlayer, jobName, jobGrade)
+    if xPlayer and jobName then
+        xPlayer.setJob(jobName, jobGrade or 0)
+    end
+end
+
+local function setOilRunnerJob(xPlayer, state)
+    local currentJob = getCurrentJob(xPlayer)
+
+    if currentJob and currentJob.name ~= Config.Job.jobName then
+        state.previousJob = currentJob
+    elseif not state.previousJob then
+        state.previousJob = Config.Job.restoreFallback
+    end
+
+    setPlayerJob(xPlayer, Config.Job.jobName, Config.Job.jobGrade)
+end
+
+local function restorePreviousJob(xPlayer, state)
+    local previousJob = state.previousJob or Config.Job.restoreFallback
+    setPlayerJob(xPlayer, previousJob.name, previousJob.grade)
+    state.previousJob = nil
+end
+
 local function resetRouteState(state)
     state.hasOil = false
     state.loading = false
@@ -72,6 +106,9 @@ local function hasTimerElapsed(startedAt, duration)
 end
 
 lib.callback.register('oilrunner:server:toggleJob', function(source)
+    local xPlayer = ESX.GetPlayerFromId(source)
+    if not xPlayer then return { success = false, message = 'Player not found.' } end
+
     local state = getPlayerState(source)
 
     if state.active then
@@ -80,11 +117,13 @@ lib.callback.register('oilrunner:server:toggleJob', function(source)
             return { success = false, active = true, message = Config.Notifications.returnTugFirst }
         end
 
+        restorePreviousJob(xPlayer, state)
         state.active = false
         resetRouteState(state)
         return { success = true, active = false, message = Config.Notifications.stopped }
     end
 
+    setOilRunnerJob(xPlayer, state)
     state.active = true
     resetRouteState(state)
     return { success = true, active = true, message = Config.Notifications.started }
@@ -272,9 +311,17 @@ AddEventHandler('playerDropped', function()
     local state = players[src]
 
     -- Deposits are intentionally forfeited on disconnect. No automatic refund is issued.
-    if state and state.tugNetId then
-        local vehicle = getEntityFromNetId(state.tugNetId)
-        if vehicle ~= 0 then DeleteEntity(vehicle) end
+    if state then
+        local xPlayer = ESX.GetPlayerFromId(src)
+
+        if xPlayer and state.active then
+            restorePreviousJob(xPlayer, state)
+        end
+
+        if state.tugNetId then
+            local vehicle = getEntityFromNetId(state.tugNetId)
+            if vehicle ~= 0 then DeleteEntity(vehicle) end
+        end
     end
 
     players[src] = nil
@@ -284,7 +331,13 @@ AddEventHandler('onResourceStop', function(resourceName)
     if resourceName ~= GetCurrentResourceName() then return end
 
     -- Do not refund deposits on restart. Only clean spawned entities where possible.
-    for _, state in pairs(players) do
+    for src, state in pairs(players) do
+        local xPlayer = ESX.GetPlayerFromId(src)
+
+        if xPlayer and state.active then
+            restorePreviousJob(xPlayer, state)
+        end
+
         if state.tugNetId then
             local vehicle = getEntityFromNetId(state.tugNetId)
             if vehicle ~= 0 then DeleteEntity(vehicle) end

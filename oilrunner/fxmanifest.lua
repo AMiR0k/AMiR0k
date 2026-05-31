@@ -21,6 +21,10 @@ server_scripts {
     'server/main.lua'
 }
 
+files {
+    'oilrunner.sql'
+}
+
 dependencies {
     'es_extended',
     'ox_lib',

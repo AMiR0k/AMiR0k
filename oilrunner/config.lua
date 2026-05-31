@@ -4,6 +4,9 @@ Config.Debug = false
 
 Config.Job = {
     name = 'Oil Runner',
+    jobName = 'oilrunner',
+    jobGrade = 0,
+    restoreFallback = { name = 'unemployed', grade = 0 },
     deposit = 100000,
     reward = { min = 10000, max = 30000 },
     loadDuration = 420000, -- 7 minutes
@@ -23,6 +26,8 @@ Config.Locations = {
 Config.Vehicle = {
     model = 'tug',
     fuel = 100.0,
+    fuelRetryCount = 6,
+    fuelRetryDelay = 2500,
     spawnCheckRadius = 8.0
 }
 
@@ -39,6 +44,13 @@ Config.Blip = {
     colour = 47,
     scale = 0.8,
     label = 'Oil Runner'
+}
+
+Config.RouteBlips = {
+    tugMenu = { sprite = 410, colour = 47, scale = 0.75, label = 'Oil Runner Tug Station' },
+    tugReturn = { sprite = 410, colour = 47, scale = 0.75, label = 'Return Oil Runner Tug' },
+    loadOil = { sprite = 436, colour = 47, scale = 0.75, label = 'Load Oil' },
+    deliverOil = { sprite = 479, colour = 47, scale = 0.75, label = 'Deliver Oil' }
 }
 
 -- Basic work outfit. Adjust component values for your clothing pack/server needs.
@@ -76,5 +88,6 @@ Config.Notifications = {
     deliveryStarted = 'Delivering oil. Stay in the tug until delivery is complete.',
     deliveryPaid = 'Oil delivered. You received $%s. GPS set back to the loading point.',
     tugReturned = 'Tug returned successfully. Your $100,000 deposit has been refunded.',
+    warpFailed = 'Tug spawned, but you could not be seated automatically. Enter your registered tug to continue.',
     actionCancelled = 'Action cancelled.'
 }

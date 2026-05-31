@@ -3,6 +3,7 @@ local activeTugNetId = nil
 local hasOil = false
 local busy = false
 local previousSkin = nil
+local routeBlips = {}
 
 local function notify(description, notifyType)
     lib.notify({
@@ -12,15 +13,56 @@ local function notify(description, notifyType)
     })
 end
 
-local function createJobBlip()
-    local blip = AddBlipForCoord(Config.Locations.jobStart.x, Config.Locations.jobStart.y, Config.Locations.jobStart.z)
-    SetBlipSprite(blip, Config.Blip.sprite)
-    SetBlipColour(blip, Config.Blip.colour)
-    SetBlipScale(blip, Config.Blip.scale)
-    SetBlipAsShortRange(blip, true)
+local function createBlip(coords, blipConfig, label)
+    local blip = AddBlipForCoord(coords.x, coords.y, coords.z)
+    SetBlipSprite(blip, blipConfig.sprite)
+    SetBlipColour(blip, blipConfig.colour)
+    SetBlipScale(blip, blipConfig.scale)
+    SetBlipAsShortRange(blip, blipConfig.shortRange ~= false)
     BeginTextCommandSetBlipName('STRING')
-    AddTextComponentString(Config.Blip.label)
+    AddTextComponentString(label)
     EndTextCommandSetBlipName(blip)
+    return blip
+end
+
+local function createJobBlip()
+    createBlip(Config.Locations.jobStart, Config.Blip, Config.Blip.label)
+end
+
+local function removeRouteBlip(name)
+    if routeBlips[name] then
+        RemoveBlip(routeBlips[name])
+        routeBlips[name] = nil
+    end
+end
+
+local function clearRouteBlips()
+    for name in pairs(routeBlips) do
+        removeRouteBlip(name)
+    end
+end
+
+local function ensureRouteBlip(name, coords, blipConfig, label)
+    if routeBlips[name] then return end
+    routeBlips[name] = createBlip(coords, blipConfig, label)
+end
+
+local function refreshRouteBlips()
+    clearRouteBlips()
+
+    if not jobActive then return end
+
+    ensureRouteBlip('tugMenu', Config.Locations.tugMenu, Config.RouteBlips.tugMenu, Config.RouteBlips.tugMenu.label)
+
+    if activeTugNetId then
+        ensureRouteBlip('tugReturn', Config.Locations.tugReturn, Config.RouteBlips.tugReturn, Config.RouteBlips.tugReturn.label)
+
+        if hasOil then
+            ensureRouteBlip('deliverOil', Config.Locations.deliverOil, Config.RouteBlips.deliverOil, Config.RouteBlips.deliverOil.label)
+        else
+            ensureRouteBlip('loadOil', Config.Locations.loadOil, Config.RouteBlips.loadOil, Config.RouteBlips.loadOil.label)
+        end
+    end
 end
 
 local function drawMarker(coords)
@@ -89,16 +131,73 @@ local function waitForNetworkVehicle(netId)
     return NetToVeh(netId)
 end
 
+local function requestControl(entity, timeoutMs)
+    local timeout = GetGameTimer() + (timeoutMs or 3000)
+
+    while entity ~= 0 and DoesEntityExist(entity) and not NetworkHasControlOfEntity(entity) and GetGameTimer() < timeout do
+        NetworkRequestControlOfEntity(entity)
+        Wait(50)
+    end
+
+    return entity ~= 0 and DoesEntityExist(entity) and NetworkHasControlOfEntity(entity)
+end
+
 local function setVehicleFuel(vehicle)
-    if vehicle == 0 then return end
+    if vehicle == 0 or not DoesEntityExist(vehicle) then return end
 
     SetVehicleFuelLevel(vehicle, Config.Vehicle.fuel)
+    DecorSetFloat(vehicle, '_FUEL_LEVEL', Config.Vehicle.fuel)
     Entity(vehicle).state:set('fuel', Config.Vehicle.fuel, true)
 
     -- Optional compatibility with common fuel resources; guarded so missing exports do not error.
     pcall(function() exports['LegacyFuel']:SetFuel(vehicle, Config.Vehicle.fuel) end)
     pcall(function() exports['cdn-fuel']:SetFuel(vehicle, Config.Vehicle.fuel) end)
     pcall(function() exports['ox_fuel']:setFuel(vehicle, Config.Vehicle.fuel) end)
+end
+
+local function prepareSpawnedTug(vehicle)
+    if vehicle == 0 or not DoesEntityExist(vehicle) then return false end
+
+    requestControl(vehicle, 3000)
+    SetEntityAsMissionEntity(vehicle, true, true)
+    SetVehicleEngineOn(vehicle, true, true, false)
+    SetVehicleUndriveable(vehicle, false)
+    setVehicleFuel(vehicle)
+
+    CreateThread(function()
+        for _ = 1, Config.Vehicle.fuelRetryCount do
+            Wait(Config.Vehicle.fuelRetryDelay)
+            if vehicle == 0 or not DoesEntityExist(vehicle) then return end
+            setVehicleFuel(vehicle)
+        end
+    end)
+
+    return true
+end
+
+local function warpIntoTug(vehicle)
+    if vehicle == 0 or not DoesEntityExist(vehicle) then return false end
+
+    local ped = PlayerPedId()
+    local spawn = Config.Locations.tugSpawn
+
+    DoScreenFadeOut(250)
+    Wait(300)
+    SetEntityCoordsNoOffset(ped, spawn.x, spawn.y, spawn.z + 1.0, false, false, false)
+    SetEntityHeading(ped, spawn.w)
+    Wait(100)
+
+    for _ = 1, 20 do
+        if GetPedInVehicleSeat(vehicle, -1) == ped then break end
+        SetPedIntoVehicle(ped, vehicle, -1)
+        TaskWarpPedIntoVehicle(ped, vehicle, -1)
+        Wait(100)
+    end
+
+    setVehicleFuel(vehicle)
+    DoScreenFadeIn(250)
+
+    return GetPedInVehicleSeat(vehicle, -1) == ped
 end
 
 local function spawnTug()
@@ -127,12 +226,11 @@ local function spawnTug()
     hasOil = false
 
     local vehicle = waitForNetworkVehicle(activeTugNetId)
-    if vehicle ~= 0 then
-        SetEntityAsMissionEntity(vehicle, true, true)
-        setVehicleFuel(vehicle)
-        TaskWarpPedIntoVehicle(PlayerPedId(), vehicle, -1)
+    if prepareSpawnedTug(vehicle) and not warpIntoTug(vehicle) then
+        notify(Config.Notifications.warpFailed, 'error')
     end
 
+    refreshRouteBlips()
     setWaypoint(Config.Locations.loadOil)
     notify(result.message or Config.Notifications.tugSpawned, 'success')
 end
@@ -170,11 +268,13 @@ local function toggleJob()
 
     if jobActive then
         applyWorkOutfit()
+        refreshRouteBlips()
         setWaypoint(Config.Locations.tugMenu)
         notify(result.message or Config.Notifications.started, 'success')
     else
         activeTugNetId = nil
         hasOil = false
+        clearRouteBlips()
         restorePreviousOutfit()
         notify(result.message or Config.Notifications.stopped, 'success')
     end
@@ -203,9 +303,11 @@ local function returnTug()
 
     if result.teleport then
         local ped = PlayerPedId()
+        ClearPedTasksImmediately(ped)
         SetEntityCoords(ped, result.teleport.x, result.teleport.y, result.teleport.z, false, false, false, true)
     end
 
+    refreshRouteBlips()
     notify(result.message or Config.Notifications.tugReturned, 'success')
 end
 
@@ -251,6 +353,7 @@ local function loadOil()
     end
 
     hasOil = true
+    refreshRouteBlips()
     setWaypoint(Config.Locations.deliverOil)
     notify(result.message or Config.Notifications.oilLoaded, 'success')
 end
@@ -297,6 +400,7 @@ local function deliverOil()
     end
 
     hasOil = false
+    refreshRouteBlips()
     setWaypoint(Config.Locations.loadOil)
     notify(result.message or Config.Notifications.deliveryPaid:format(result.reward or 0), 'success')
 end
@@ -319,6 +423,10 @@ local function handleMarker(coords, prompt, action)
 end
 
 CreateThread(function()
+    if not DecorIsRegisteredAsType('_FUEL_LEVEL', 1) then
+        DecorRegister('_FUEL_LEVEL', 1)
+    end
+
     createJobBlip()
 
     while true do
@@ -360,5 +468,6 @@ end)
 AddEventHandler('onResourceStop', function(resourceName)
     if resourceName ~= GetCurrentResourceName() then return end
     hideHelp()
+    clearRouteBlips()
     restorePreviousOutfit()
 end)
