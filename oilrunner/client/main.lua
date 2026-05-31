@@ -4,6 +4,7 @@ local PlayerState = {
     jobActive = false,
     hasOil = false,
     tugNetId = nil,
+    tugPlate = nil,
     busy = false,
     savedSkin = nil
 }
@@ -85,11 +86,13 @@ end
 local function isInsideRegisteredTug()
     local netId, vehicle = getCurrentVehicleNetId()
 
-    if not netId or not PlayerState.tugNetId then
+    if not netId or not PlayerState.tugNetId or vehicle == 0 then
         return false, netId, vehicle
     end
 
-    return netId == PlayerState.tugNetId and GetEntityModel(vehicle) == Config.TugModel, netId, vehicle
+    -- Client-side check only confirms the player is in a Tug and has a registered job Tug.
+    -- Exact ownership is validated server-side by net id + generated plate.
+    return GetEntityModel(vehicle) == Config.TugModel, netId, vehicle
 end
 
 local function cleanupLocalTug()
@@ -107,6 +110,7 @@ local function cleanupLocalTug()
     end
 
     PlayerState.tugNetId = nil
+    PlayerState.tugPlate = nil
 end
 
 local function spawnTug()
@@ -125,6 +129,7 @@ local function spawnTug()
 
     local netId = response.netId
     PlayerState.tugNetId = netId
+    PlayerState.tugPlate = response.plate
     PlayerState.hasOil = false
 
     local vehicle = 0
@@ -188,6 +193,7 @@ local function toggleJob()
     PlayerState.jobActive = response.active
     PlayerState.hasOil = response.hasOil or false
     PlayerState.tugNetId = response.tugNetId
+    PlayerState.tugPlate = response.tugPlate
 
     if response.active then
         applyWorkClothes()
@@ -317,6 +323,7 @@ local function returnTug()
 
     cleanupLocalTug()
     PlayerState.tugNetId = nil
+    PlayerState.tugPlate = nil
     PlayerState.hasOil = false
     SetEntityCoords(PlayerPedId(), Config.AfterReturnTeleport.x, Config.AfterReturnTeleport.y, Config.AfterReturnTeleport.z, false, false, false, false)
     notify(Config.Text.returnComplete, 'success')
@@ -333,7 +340,8 @@ local function handlePoint(coords, markerConfig, helpText, action, shouldShow)
     if distance <= Config.DrawDistance then
         drawConfiguredMarker(coords, markerConfig)
 
-        if distance <= Config.InteractDistance then
+        local interactDistance = markerConfig and markerConfig.interactDistance or Config.InteractDistance
+        if distance <= interactDistance then
             lib.showTextUI(helpText)
             if IsControlJustReleased(0, 38) then
                 action()
@@ -400,6 +408,7 @@ RegisterNetEvent('oilrunner:client:syncState', function(state)
     PlayerState.jobActive = state.jobActive or false
     PlayerState.hasOil = state.hasOil or false
     PlayerState.tugNetId = state.tugNetId
+    PlayerState.tugPlate = state.tugPlate
 end)
 
 RegisterNetEvent('oilrunner:client:forceCleanup', function()

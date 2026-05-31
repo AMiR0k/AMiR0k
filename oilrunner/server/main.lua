@@ -8,6 +8,8 @@ local function getState(source)
             jobActive = false,
             hasOil = false,
             tugNetId = nil,
+            tugPlate = nil,
+            identifier = nil,
             depositPaid = false,
             loading = false,
             delivering = false
@@ -33,7 +35,8 @@ local function syncState(source)
     TriggerClientEvent('oilrunner:client:syncState', source, {
         jobActive = state.jobActive,
         hasOil = state.hasOil,
-        tugNetId = state.tugNetId
+        tugNetId = state.tugNetId,
+        tugPlate = state.tugPlate
     })
 end
 
@@ -55,9 +58,64 @@ local function distanceTo(source, coords)
     return #(GetEntityCoords(ped) - coords)
 end
 
-local function isPlayerInRegisteredTug(source, netId)
+local function normalizePlate(plate)
+    return (plate or ''):upper():gsub('%s+', '')
+end
+
+local function generateTugPlate(source)
+    return ('OIL%04d'):format((source * 97 + math.random(0, 9999)) % 10000)
+end
+
+local function dbExecute(query, params)
+    if GetResourceState('oxmysql') ~= 'started' then
+        return
+    end
+
+    pcall(function()
+        exports.oxmysql:execute(query, params or {})
+    end)
+end
+
+local function registerTugInDatabase(state, source)
+    if not state.identifier or not state.tugPlate or not state.tugNetId then
+        return
+    end
+
+    dbExecute([[
+        INSERT INTO oilrunner_active_tugs (identifier, source, plate, net_id, deposit_paid, has_oil)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+            source = VALUES(source),
+            plate = VALUES(plate),
+            net_id = VALUES(net_id),
+            deposit_paid = VALUES(deposit_paid),
+            has_oil = VALUES(has_oil),
+            updated_at = CURRENT_TIMESTAMP
+    ]], { state.identifier, source, state.tugPlate, state.tugNetId, state.depositPaid and 1 or 0, state.hasOil and 1 or 0 })
+end
+
+local function updateTugOilInDatabase(state)
+    if not state.identifier then
+        return
+    end
+
+    dbExecute('UPDATE oilrunner_active_tugs SET has_oil = ?, updated_at = CURRENT_TIMESTAMP WHERE identifier = ?', {
+        state.hasOil and 1 or 0,
+        state.identifier
+    })
+end
+
+local function removeTugFromDatabase(state)
+    if not state.identifier then
+        return
+    end
+
+    dbExecute('DELETE FROM oilrunner_active_tugs WHERE identifier = ?', { state.identifier })
+end
+
+local function isPlayerInRegisteredTug(source, _netId)
     local state = getState(source)
-    if not state.tugNetId or state.tugNetId ~= netId then
+    if not state.tugNetId or not state.tugPlate then
         return false
     end
 
@@ -67,18 +125,22 @@ local function isPlayerInRegisteredTug(source, netId)
     end
 
     local vehicle = GetVehiclePedIsIn(ped, false)
-    if vehicle == 0 then
+    if vehicle == 0 or GetEntityModel(vehicle) ~= Config.TugModel then
         return false
     end
 
     local currentNetId = NetworkGetNetworkIdFromEntity(vehicle)
-    if currentNetId ~= state.tugNetId then
-        return false
+    local currentPlate = normalizePlate(GetVehicleNumberPlateText(vehicle))
+    local registeredPlate = normalizePlate(state.tugPlate)
+    local registeredEntity = NetworkGetEntityFromNetworkId(state.tugNetId)
+
+    if registeredEntity ~= 0 and DoesEntityExist(registeredEntity) then
+        return vehicle == registeredEntity and currentPlate == registeredPlate
     end
 
-    return GetEntityModel(vehicle) == Config.TugModel
+    -- Fallback for older artifacts/streaming edge-cases: the generated server plate is still unique per active route.
+    return currentNetId == state.tugNetId or currentPlate == registeredPlate
 end
-
 
 local function deleteTugEntity(netId)
     local entity = NetworkGetEntityFromNetworkId(netId)
@@ -113,7 +175,7 @@ lib.callback.register('oilrunner:server:toggleJob', function(source)
     state.jobActive = true
     clearRouteState(state)
     syncState(source)
-    return response(true, nil, { active = true, hasOil = false, tugNetId = state.tugNetId })
+    return response(true, nil, { active = true, hasOil = false, tugNetId = state.tugNetId, tugPlate = state.tugPlate })
 end)
 
 lib.callback.register('oilrunner:server:requestTugSpawn', function(source)
@@ -144,28 +206,36 @@ lib.callback.register('oilrunner:server:requestTugSpawn', function(source)
     xPlayer.removeMoney(Config.Deposit)
     state.depositPaid = true
     state.hasOil = false
+    state.identifier = xPlayer.identifier
 
     local spawn = Config.TugSpawn
     local vehicle = CreateVehicle(Config.TugModel, spawn.x, spawn.y, spawn.z, spawn.w, true, true)
     if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then
         xPlayer.addMoney(Config.Deposit)
         state.depositPaid = false
+        state.identifier = nil
         return response(false, 'اسپاون Tug ناموفق بود. ودیعه شما برگشت داده شد.')
     end
+
+    local plate = generateTugPlate(source)
+    SetVehicleNumberPlateText(vehicle, plate)
 
     local netId = NetworkGetNetworkIdFromEntity(vehicle)
     if not netId or netId == 0 then
         DeleteEntity(vehicle)
         xPlayer.addMoney(Config.Deposit)
         state.depositPaid = false
+        state.identifier = nil
         return response(false, 'ثبت Network ID خودرو ناموفق بود. ودیعه شما برگشت داده شد.')
     end
 
     SetEntityRoutingBucket(vehicle, GetPlayerRoutingBucket(source))
     state.tugNetId = netId
+    state.tugPlate = plate
+    registerTugInDatabase(state, source)
     syncState(source)
 
-    return response(true, nil, { netId = netId })
+    return response(true, nil, { netId = netId, plate = plate })
 end)
 
 lib.callback.register('oilrunner:server:beginLoadOil', function(source, netId)
@@ -221,6 +291,7 @@ lib.callback.register('oilrunner:server:finishLoadOil', function(source, netId, 
     end
 
     state.hasOil = true
+    updateTugOilInDatabase(state)
     syncState(source)
     return response(true)
 end)
@@ -277,6 +348,7 @@ lib.callback.register('oilrunner:server:finishDeliverOil', function(source, netI
     local reward = math.random(Config.Reward.min, Config.Reward.max)
     xPlayer.addMoney(reward)
     state.hasOil = false
+    updateTugOilInDatabase(state)
     syncState(source)
 
     return response(true, nil, { reward = reward })
@@ -302,16 +374,15 @@ lib.callback.register('oilrunner:server:returnTug', function(source, netId)
         return response(false, Config.Text.notInRegisteredTug)
     end
 
-    if netId ~= state.tugNetId then
-        return response(false, Config.Text.exploitBlocked)
-    end
-
     local tugNetId = state.tugNetId
 
     -- Deposit refund is independent from delivery rewards and can happen only once here.
     xPlayer.addMoney(Config.Deposit)
+    removeTugFromDatabase(state)
     state.depositPaid = false
     state.tugNetId = nil
+    state.tugPlate = nil
+    state.identifier = nil
     clearRouteState(state)
     syncState(source)
 
@@ -325,6 +396,7 @@ AddEventHandler('playerDropped', function()
     local state = Players[source]
 
     if state and state.tugNetId then
+        removeTugFromDatabase(state)
         deleteTugEntity(state.tugNetId)
     end
 
@@ -339,6 +411,7 @@ AddEventHandler('onResourceStop', function(resourceName)
 
     for source, state in pairs(Players) do
         if state.tugNetId then
+            removeTugFromDatabase(state)
             deleteTugEntity(state.tugNetId)
         end
         TriggerClientEvent('oilrunner:client:forceCleanup', source)

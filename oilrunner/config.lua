@@ -8,7 +8,7 @@ Config.Reward = { min = 10000, max = 30000 }
 Config.LoadDuration = 420000 -- 7 minutes
 Config.DeliverDuration = 300000 -- 5 minutes
 Config.InteractDistance = 2.5
-Config.DrawDistance = 35.0
+Config.DrawDistance = 120.0
 Config.ValidationDistance = 20.0
 
 -- Main locations
@@ -41,9 +41,10 @@ Config.Marker = {
 Config.Markers = {
     start = { color = { r = 0, g = 180, b = 255, a = 160 } },
     spawn = { color = { r = 255, g = 200, b = 0, a = 160 } },
-    returnTug = { color = { r = 255, g = 60, b = 60, a = 160 } },
-    load = { color = { r = 60, g = 180, b = 255, a = 160 } },
-    deliver = { color = { r = 40, g = 220, b = 90, a = 160 } }
+    -- Large route markers are intentionally 40+ wide so boat players can see and enter them easily.
+    returnTug = { scale = vector3(40.0, 40.0, 3.0), interactDistance = 20.0, color = { r = 255, g = 60, b = 60, a = 160 } },
+    load = { scale = vector3(45.0, 45.0, 3.0), interactDistance = 20.0, color = { r = 60, g = 180, b = 255, a = 160 } },
+    deliver = { scale = vector3(45.0, 45.0, 3.0), interactDistance = 20.0, color = { r = 40, g = 220, b = 90, a = 160 } }
 }
 
 -- Work clothes. These are intentionally simple defaults; adjust to your server clothing pack.
@@ -78,7 +79,7 @@ Config.Text = {
     noMoney = 'برای دریافت Tug به 100,000 دلار پول نقد ودیعه نیاز دارید.',
     tugSpawned = 'یدک‌کش تحویل داده شد. GPS روی محل بارگیری تنظیم شد.',
     alreadyHasTug = 'شما از قبل یک Tug فعال دارید.',
-    notInRegisteredTug = 'باید داخل Tug ثبت‌شده خود باشید.',
+    notInRegisteredTug = 'باید داخل Tug شغلی خودتان باشید. Tug با پلاک اختصاصی شما در سرور ثبت می‌شود.',
     loading = 'در حال بارگیری نفت...',
     delivering = 'در حال تحویل نفت...',
     loadComplete = 'نفت با موفقیت بارگیری شد. GPS روی محل تحویل تنظیم شد.',
