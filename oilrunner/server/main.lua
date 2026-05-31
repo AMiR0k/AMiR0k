@@ -1,0 +1,349 @@
+local ESX = exports['es_extended']:getSharedObject()
+
+local Players = {}
+
+local function getState(source)
+    if not Players[source] then
+        Players[source] = {
+            jobActive = false,
+            hasOil = false,
+            tugNetId = nil,
+            depositPaid = false,
+            loading = false,
+            delivering = false
+        }
+    end
+
+    return Players[source]
+end
+
+local function resetState(source)
+    Players[source] = nil
+end
+
+local function response(success, message, extra)
+    local data = extra or {}
+    data.success = success
+    data.message = message
+    return data
+end
+
+local function syncState(source)
+    local state = getState(source)
+    TriggerClientEvent('oilrunner:client:syncState', source, {
+        jobActive = state.jobActive,
+        hasOil = state.hasOil,
+        tugNetId = state.tugNetId
+    })
+end
+
+local function getPed(source)
+    local ped = GetPlayerPed(source)
+    if not ped or ped == 0 then
+        return nil
+    end
+
+    return ped
+end
+
+local function distanceTo(source, coords)
+    local ped = getPed(source)
+    if not ped then
+        return math.huge
+    end
+
+    return #(GetEntityCoords(ped) - coords)
+end
+
+local function isPlayerInRegisteredTug(source, netId)
+    local state = getState(source)
+    if not state.tugNetId or state.tugNetId ~= netId then
+        return false
+    end
+
+    local ped = getPed(source)
+    if not ped then
+        return false
+    end
+
+    local vehicle = GetVehiclePedIsIn(ped, false)
+    if vehicle == 0 then
+        return false
+    end
+
+    local currentNetId = NetworkGetNetworkIdFromEntity(vehicle)
+    if currentNetId ~= state.tugNetId then
+        return false
+    end
+
+    return GetEntityModel(vehicle) == Config.TugModel
+end
+
+
+local function deleteTugEntity(netId)
+    local entity = NetworkGetEntityFromNetworkId(netId)
+    if entity ~= 0 and DoesEntityExist(entity) then
+        DeleteEntity(entity)
+    end
+
+    -- Client fallback covers ownership/streaming edge-cases on older artifacts.
+    TriggerClientEvent('oilrunner:client:deleteTug', -1, netId)
+end
+
+local function clearRouteState(state)
+    state.hasOil = false
+    state.loading = false
+    state.delivering = false
+end
+
+lib.callback.register('oilrunner:server:toggleJob', function(source)
+    local state = getState(source)
+
+    if state.jobActive then
+        if state.tugNetId or state.depositPaid then
+            return response(false, Config.Text.mustReturnTug)
+        end
+
+        state.jobActive = false
+        clearRouteState(state)
+        syncState(source)
+        return response(true, nil, { active = false, hasOil = false })
+    end
+
+    state.jobActive = true
+    clearRouteState(state)
+    syncState(source)
+    return response(true, nil, { active = true, hasOil = false, tugNetId = state.tugNetId })
+end)
+
+lib.callback.register('oilrunner:server:requestTugSpawn', function(source)
+    local state = getState(source)
+    local xPlayer = ESX.GetPlayerFromId(source)
+
+    if not xPlayer then
+        return response(false, Config.Text.exploitBlocked)
+    end
+
+    if not state.jobActive then
+        return response(false, Config.Text.exploitBlocked)
+    end
+
+    if state.tugNetId or state.depositPaid then
+        return response(false, Config.Text.alreadyHasTug)
+    end
+
+    if distanceTo(source, Config.SpawnMenu) > Config.ValidationDistance then
+        return response(false, Config.Text.exploitBlocked)
+    end
+
+    if xPlayer.getMoney() < Config.Deposit then
+        return response(false, Config.Text.noMoney)
+    end
+
+    -- Deposit and vehicle creation are both server-side to prevent duplication/refund exploits.
+    xPlayer.removeMoney(Config.Deposit)
+    state.depositPaid = true
+    state.hasOil = false
+
+    local spawn = Config.TugSpawn
+    local vehicle = CreateVehicle(Config.TugModel, spawn.x, spawn.y, spawn.z, spawn.w, true, true)
+    if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then
+        xPlayer.addMoney(Config.Deposit)
+        state.depositPaid = false
+        return response(false, 'اسپاون Tug ناموفق بود. ودیعه شما برگشت داده شد.')
+    end
+
+    local netId = NetworkGetNetworkIdFromEntity(vehicle)
+    if not netId or netId == 0 then
+        DeleteEntity(vehicle)
+        xPlayer.addMoney(Config.Deposit)
+        state.depositPaid = false
+        return response(false, 'ثبت Network ID خودرو ناموفق بود. ودیعه شما برگشت داده شد.')
+    end
+
+    SetEntityRoutingBucket(vehicle, GetPlayerRoutingBucket(source))
+    state.tugNetId = netId
+    syncState(source)
+
+    return response(true, nil, { netId = netId })
+end)
+
+lib.callback.register('oilrunner:server:beginLoadOil', function(source, netId)
+    local state = getState(source)
+
+    if not state.jobActive or not state.tugNetId or not state.depositPaid then
+        return response(false, Config.Text.exploitBlocked)
+    end
+
+    if state.hasOil then
+        return response(false, 'شما از قبل نفت بارگیری‌شده دارید.')
+    end
+
+    if state.loading or state.delivering then
+        return response(false, 'یک عملیات دیگر در حال انجام است.')
+    end
+
+    if distanceTo(source, Config.LoadOil) > Config.ValidationDistance then
+        return response(false, Config.Text.exploitBlocked)
+    end
+
+    if not isPlayerInRegisteredTug(source, netId) then
+        return response(false, Config.Text.notInRegisteredTug)
+    end
+
+    state.loading = true
+    return response(true)
+end)
+
+lib.callback.register('oilrunner:server:finishLoadOil', function(source, netId, completed)
+    local state = getState(source)
+
+    if not state.loading then
+        return response(false, Config.Text.exploitBlocked)
+    end
+
+    state.loading = false
+
+    if completed ~= true then
+        return response(true)
+    end
+
+    if not state.jobActive or not state.tugNetId or not state.depositPaid then
+        return response(false, Config.Text.exploitBlocked)
+    end
+
+    if distanceTo(source, Config.LoadOil) > Config.ValidationDistance then
+        return response(false, Config.Text.exploitBlocked)
+    end
+
+    if not isPlayerInRegisteredTug(source, netId) then
+        return response(false, Config.Text.notInRegisteredTug)
+    end
+
+    state.hasOil = true
+    syncState(source)
+    return response(true)
+end)
+
+lib.callback.register('oilrunner:server:beginDeliverOil', function(source, netId)
+    local state = getState(source)
+
+    if not state.jobActive or not state.tugNetId or not state.depositPaid or not state.hasOil then
+        return response(false, Config.Text.exploitBlocked)
+    end
+
+    if state.loading or state.delivering then
+        return response(false, 'یک عملیات دیگر در حال انجام است.')
+    end
+
+    if distanceTo(source, Config.DeliverOil) > Config.ValidationDistance then
+        return response(false, Config.Text.exploitBlocked)
+    end
+
+    if not isPlayerInRegisteredTug(source, netId) then
+        return response(false, Config.Text.notInRegisteredTug)
+    end
+
+    state.delivering = true
+    return response(true)
+end)
+
+lib.callback.register('oilrunner:server:finishDeliverOil', function(source, netId, completed)
+    local state = getState(source)
+    local xPlayer = ESX.GetPlayerFromId(source)
+
+    if not state.delivering then
+        return response(false, Config.Text.exploitBlocked)
+    end
+
+    state.delivering = false
+
+    if completed ~= true then
+        return response(true)
+    end
+
+    if not xPlayer or not state.jobActive or not state.tugNetId or not state.depositPaid or not state.hasOil then
+        return response(false, Config.Text.exploitBlocked)
+    end
+
+    if distanceTo(source, Config.DeliverOil) > Config.ValidationDistance then
+        return response(false, Config.Text.exploitBlocked)
+    end
+
+    if not isPlayerInRegisteredTug(source, netId) then
+        return response(false, Config.Text.notInRegisteredTug)
+    end
+
+    local reward = math.random(Config.Reward.min, Config.Reward.max)
+    xPlayer.addMoney(reward)
+    state.hasOil = false
+    syncState(source)
+
+    return response(true, nil, { reward = reward })
+end)
+
+lib.callback.register('oilrunner:server:returnTug', function(source, netId)
+    local state = getState(source)
+    local xPlayer = ESX.GetPlayerFromId(source)
+
+    if not xPlayer or not state.jobActive or not state.depositPaid or not state.tugNetId then
+        return response(false, Config.Text.exploitBlocked)
+    end
+
+    if state.loading or state.delivering then
+        return response(false, 'ابتدا عملیات فعلی را تمام یا لغو کنید.')
+    end
+
+    if distanceTo(source, Config.ReturnTug) > Config.ValidationDistance then
+        return response(false, Config.Text.exploitBlocked)
+    end
+
+    if not isPlayerInRegisteredTug(source, netId) then
+        return response(false, Config.Text.notInRegisteredTug)
+    end
+
+    if netId ~= state.tugNetId then
+        return response(false, Config.Text.exploitBlocked)
+    end
+
+    local tugNetId = state.tugNetId
+
+    -- Deposit refund is independent from delivery rewards and can happen only once here.
+    xPlayer.addMoney(Config.Deposit)
+    state.depositPaid = false
+    state.tugNetId = nil
+    clearRouteState(state)
+    syncState(source)
+
+    deleteTugEntity(tugNetId)
+
+    return response(true)
+end)
+
+AddEventHandler('playerDropped', function()
+    local source = source
+    local state = Players[source]
+
+    if state and state.tugNetId then
+        deleteTugEntity(state.tugNetId)
+    end
+
+    -- Deposit is intentionally not refunded on disconnect.
+    resetState(source)
+end)
+
+AddEventHandler('onResourceStop', function(resourceName)
+    if resourceName ~= GetCurrentResourceName() then
+        return
+    end
+
+    for source, state in pairs(Players) do
+        if state.tugNetId then
+            deleteTugEntity(state.tugNetId)
+        end
+        TriggerClientEvent('oilrunner:client:forceCleanup', source)
+    end
+
+    -- Deposits are intentionally not refunded on resource restart/stop.
+    Players = {}
+end)
