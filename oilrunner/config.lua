@@ -26,14 +26,17 @@ Config.Locations = {
 Config.Vehicle = {
     model = 'tug',
     fuel = 100.0,
-    fuelRetryCount = 6,
+    minimumFuel = 85.0,
+    fuelRetryCount = 12,
     fuelRetryDelay = 2500,
+    fuelMonitorInterval = 5000,
     spawnCheckRadius = 8.0
 }
 
 Config.Marker = {
-    drawDistance = 35.0,
-    interactDistance = 2.5,
+    drawDistance = 150.0,
+    interactDistance = 4.0,
+    zOffset = 0.25,
     type = 1,
     scale = vector3(2.2, 2.2, 1.0),
     colour = { r = 245, g = 166, b = 35, a = 160 }
@@ -47,10 +50,10 @@ Config.Blip = {
 }
 
 Config.RouteBlips = {
-    tugMenu = { sprite = 410, colour = 47, scale = 0.75, label = 'Oil Runner Tug Station' },
-    tugReturn = { sprite = 410, colour = 47, scale = 0.75, label = 'Return Oil Runner Tug' },
-    loadOil = { sprite = 436, colour = 47, scale = 0.75, label = 'Load Oil' },
-    deliverOil = { sprite = 479, colour = 47, scale = 0.75, label = 'Deliver Oil' }
+    tugMenu = { sprite = 410, colour = 47, scale = 0.75, label = 'Oil Runner Tug Station', shortRange = false },
+    tugReturn = { sprite = 410, colour = 47, scale = 0.75, label = 'Return Oil Runner Tug', shortRange = false },
+    loadOil = { sprite = 436, colour = 47, scale = 0.75, label = 'Load Oil', shortRange = false },
+    deliverOil = { sprite = 479, colour = 47, scale = 0.75, label = 'Deliver Oil', shortRange = false }
 }
 
 -- Basic work outfit. Adjust component values for your clothing pack/server needs.

@@ -4,6 +4,8 @@ local hasOil = false
 local busy = false
 local previousSkin = nil
 local routeBlips = {}
+local currentRouteBlip = nil
+local fuelDecorators = { '_FUEL_LEVEL', 'fuelLevel' }
 
 local function notify(description, notifyType)
     lib.notify({
@@ -31,6 +33,7 @@ end
 
 local function removeRouteBlip(name)
     if routeBlips[name] then
+        SetBlipRoute(routeBlips[name], false)
         RemoveBlip(routeBlips[name])
         routeBlips[name] = nil
     end
@@ -47,28 +50,43 @@ local function ensureRouteBlip(name, coords, blipConfig, label)
     routeBlips[name] = createBlip(coords, blipConfig, label)
 end
 
+local function setRouteBlip(name)
+    if currentRouteBlip and routeBlips[currentRouteBlip] then
+        SetBlipRoute(routeBlips[currentRouteBlip], false)
+    end
+
+    currentRouteBlip = name
+
+    if name and routeBlips[name] then
+        SetBlipRoute(routeBlips[name], true)
+        SetBlipRouteColour(routeBlips[name], Config.RouteBlips[name].colour)
+    end
+end
+
 local function refreshRouteBlips()
     clearRouteBlips()
 
-    if not jobActive then return end
+    if not jobActive then
+        setRouteBlip(nil)
+        return
+    end
 
     ensureRouteBlip('tugMenu', Config.Locations.tugMenu, Config.RouteBlips.tugMenu, Config.RouteBlips.tugMenu.label)
 
     if activeTugNetId then
         ensureRouteBlip('tugReturn', Config.Locations.tugReturn, Config.RouteBlips.tugReturn, Config.RouteBlips.tugReturn.label)
-
-        if hasOil then
-            ensureRouteBlip('deliverOil', Config.Locations.deliverOil, Config.RouteBlips.deliverOil, Config.RouteBlips.deliverOil.label)
-        else
-            ensureRouteBlip('loadOil', Config.Locations.loadOil, Config.RouteBlips.loadOil, Config.RouteBlips.loadOil.label)
-        end
+        ensureRouteBlip('loadOil', Config.Locations.loadOil, Config.RouteBlips.loadOil, Config.RouteBlips.loadOil.label)
+        ensureRouteBlip('deliverOil', Config.Locations.deliverOil, Config.RouteBlips.deliverOil, Config.RouteBlips.deliverOil.label)
+        setRouteBlip(hasOil and 'deliverOil' or 'loadOil')
+    else
+        setRouteBlip('tugMenu')
     end
 end
 
 local function drawMarker(coords)
     DrawMarker(
         Config.Marker.type,
-        coords.x, coords.y, coords.z - 1.0,
+        coords.x, coords.y, coords.z + (Config.Marker.zOffset or 0.0),
         0.0, 0.0, 0.0,
         0.0, 0.0, 0.0,
         Config.Marker.scale.x, Config.Marker.scale.y, Config.Marker.scale.z,
@@ -146,7 +164,13 @@ local function setVehicleFuel(vehicle)
     if vehicle == 0 or not DoesEntityExist(vehicle) then return end
 
     SetVehicleFuelLevel(vehicle, Config.Vehicle.fuel)
-    DecorSetFloat(vehicle, '_FUEL_LEVEL', Config.Vehicle.fuel)
+    SetVehiclePetrolTankHealth(vehicle, 1000.0)
+    SetVehicleEngineHealth(vehicle, 1000.0)
+
+    for _, decorator in ipairs(fuelDecorators) do
+        DecorSetFloat(vehicle, decorator, Config.Vehicle.fuel)
+    end
+
     Entity(vehicle).state:set('fuel', Config.Vehicle.fuel, true)
 
     -- Optional compatibility with common fuel resources; guarded so missing exports do not error.
@@ -183,15 +207,27 @@ local function warpIntoTug(vehicle)
 
     DoScreenFadeOut(250)
     Wait(300)
-    SetEntityCoordsNoOffset(ped, spawn.x, spawn.y, spawn.z + 1.0, false, false, false)
+    RequestCollisionAtCoord(spawn.x, spawn.y, spawn.z)
+    requestControl(vehicle, 3000)
+    ClearPedTasksImmediately(ped)
+    SetEntityCoordsNoOffset(vehicle, spawn.x, spawn.y, spawn.z, false, false, false)
+    SetEntityHeading(vehicle, spawn.w)
+    SetEntityCoordsNoOffset(ped, spawn.x, spawn.y, spawn.z + 1.5, false, false, false)
     SetEntityHeading(ped, spawn.w)
-    Wait(100)
+    Wait(250)
 
-    for _ = 1, 20 do
+    for _ = 1, 30 do
         if GetPedInVehicleSeat(vehicle, -1) == ped then break end
+        requestControl(vehicle, 500)
+        ClearPedTasksImmediately(ped)
         SetPedIntoVehicle(ped, vehicle, -1)
         TaskWarpPedIntoVehicle(ped, vehicle, -1)
-        Wait(100)
+        Wait(150)
+    end
+
+    if GetPedInVehicleSeat(vehicle, -1) ~= ped then
+        local fallbackCoords = GetOffsetFromEntityInWorldCoords(vehicle, 0.0, -2.0, 1.0)
+        SetEntityCoordsNoOffset(ped, fallbackCoords.x, fallbackCoords.y, fallbackCoords.z, false, false, false)
     end
 
     setVehicleFuel(vehicle)
@@ -405,6 +441,18 @@ local function deliverOil()
     notify(result.message or Config.Notifications.deliveryPaid:format(result.reward or 0), 'success')
 end
 
+local function drawPassiveMarker(coords)
+    local playerCoords = GetEntityCoords(PlayerPedId())
+    local distance = #(playerCoords - coords)
+
+    if distance <= Config.Marker.drawDistance then
+        drawMarker(coords)
+        return true
+    end
+
+    return false
+end
+
 local function handleMarker(coords, prompt, action)
     local playerCoords = GetEntityCoords(PlayerPedId())
     local distance = #(playerCoords - coords)
@@ -423,8 +471,10 @@ local function handleMarker(coords, prompt, action)
 end
 
 CreateThread(function()
-    if not DecorIsRegisteredAsType('_FUEL_LEVEL', 1) then
-        DecorRegister('_FUEL_LEVEL', 1)
+    for _, decorator in ipairs(fuelDecorators) do
+        if not DecorIsRegisteredAsType(decorator, 1) then
+            DecorRegister(decorator, 1)
+        end
     end
 
     createJobBlip()
@@ -449,19 +499,40 @@ CreateThread(function()
                 showingText = true
             end
 
-            if activeTugNetId and not hasOil and handleMarker(Config.Locations.loadOil, '[E] Load Oil', loadOil) then
-                sleep = 0
-                showingText = true
-            end
-
-            if activeTugNetId and hasOil and handleMarker(Config.Locations.deliverOil, '[E] Deliver Oil', deliverOil) then
-                sleep = 0
-                showingText = true
+            if activeTugNetId then
+                if hasOil then
+                    if drawPassiveMarker(Config.Locations.loadOil) then sleep = 0 end
+                    if handleMarker(Config.Locations.deliverOil, '[E] Deliver Oil', deliverOil) then
+                        sleep = 0
+                        showingText = true
+                    end
+                else
+                    if handleMarker(Config.Locations.loadOil, '[E] Load Oil', loadOil) then
+                        sleep = 0
+                        showingText = true
+                    end
+                    if drawPassiveMarker(Config.Locations.deliverOil) then sleep = 0 end
+                end
             end
         end
 
         if not showingText then hideHelp() end
         Wait(sleep)
+    end
+end)
+
+
+CreateThread(function()
+    while true do
+        Wait(Config.Vehicle.fuelMonitorInterval)
+
+        if activeTugNetId and NetworkDoesEntityExistWithNetworkId(activeTugNetId) then
+            local vehicle = NetToVeh(activeTugNetId)
+
+            if vehicle ~= 0 and DoesEntityExist(vehicle) and GetVehicleFuelLevel(vehicle) < Config.Vehicle.minimumFuel then
+                setVehicleFuel(vehicle)
+            end
+        end
     end
 end)
 

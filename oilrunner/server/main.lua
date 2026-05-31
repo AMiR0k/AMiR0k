@@ -168,7 +168,14 @@ lib.callback.register('oilrunner:server:spawnTug', function(source)
 
     SetEntityHeading(vehicle, spawn.w)
     SetVehicleNumberPlateText(vehicle, ('OIL%03d'):format(source % 1000))
+    SetVehicleFuelLevel(vehicle, Config.Vehicle.fuel)
     Entity(vehicle).state:set('fuel', Config.Vehicle.fuel, true)
+
+    local ped = getPed(source)
+    if ped then
+        SetEntityCoords(ped, spawn.x, spawn.y, spawn.z + 1.5, false, false, false, true)
+        SetPedIntoVehicle(ped, vehicle, -1)
+    end
 
     local netId = NetworkGetNetworkIdFromEntity(vehicle)
     state.tugNetId = netId
