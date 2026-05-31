@@ -7,7 +7,9 @@ local function getPlayerState(source)
         tugNetId = nil,
         hasOil = false,
         loading = false,
-        delivering = false
+        loadingStartedAt = nil,
+        delivering = false,
+        deliveryStartedAt = nil
     }
 
     return players[source]
@@ -60,7 +62,13 @@ end
 local function resetRouteState(state)
     state.hasOil = false
     state.loading = false
+    state.loadingStartedAt = nil
     state.delivering = false
+    state.deliveryStartedAt = nil
+end
+
+local function hasTimerElapsed(startedAt, duration)
+    return type(startedAt) == 'number' and GetGameTimer() - startedAt >= duration
 end
 
 lib.callback.register('oilrunner:server:toggleJob', function(source)
@@ -143,6 +151,7 @@ lib.callback.register('oilrunner:server:startLoading', function(source, netId)
     if not isRegisteredTugDriver(source, state, netId) then return { success = false, message = Config.Notifications.notInTug } end
 
     state.loading = true
+    state.loadingStartedAt = GetGameTimer()
     return { success = true }
 end)
 
@@ -155,10 +164,16 @@ lib.callback.register('oilrunner:server:finishLoading', function(source, netId)
 
     if not isNear(source, Config.Locations.loadOil, 25.0) or not isRegisteredTugDriver(source, state, netId) then
         state.loading = false
+        state.loadingStartedAt = nil
         return { success = false, message = Config.Notifications.notInTug }
     end
 
+    if not hasTimerElapsed(state.loadingStartedAt, Config.Job.loadDuration) then
+        return { success = false, message = 'Oil loading is not complete yet.' }
+    end
+
     state.loading = false
+    state.loadingStartedAt = nil
     state.hasOil = true
     return { success = true, message = Config.Notifications.oilLoaded }
 end)
@@ -166,6 +181,7 @@ end)
 RegisterNetEvent('oilrunner:server:cancelLoading', function()
     local state = getPlayerState(source)
     state.loading = false
+    state.loadingStartedAt = nil
 end)
 
 lib.callback.register('oilrunner:server:startDelivery', function(source, netId)
@@ -181,6 +197,7 @@ lib.callback.register('oilrunner:server:startDelivery', function(source, netId)
     if not isRegisteredTugDriver(source, state, netId) then return { success = false, message = Config.Notifications.notInTug } end
 
     state.delivering = true
+    state.deliveryStartedAt = GetGameTimer()
     return { success = true }
 end)
 
@@ -194,7 +211,12 @@ lib.callback.register('oilrunner:server:finishDelivery', function(source, netId)
 
     if not isNear(source, Config.Locations.deliverOil, 25.0) or not isRegisteredTugDriver(source, state, netId) then
         state.delivering = false
+        state.deliveryStartedAt = nil
         return { success = false, message = Config.Notifications.notInTug }
+    end
+
+    if not hasTimerElapsed(state.deliveryStartedAt, Config.Job.deliverDuration) then
+        return { success = false, message = 'Oil delivery is not complete yet.' }
     end
 
     local reward = math.random(Config.Job.reward.min, Config.Job.reward.max)
@@ -202,6 +224,7 @@ lib.callback.register('oilrunner:server:finishDelivery', function(source, netId)
 
     state.hasOil = false
     state.delivering = false
+    state.deliveryStartedAt = nil
 
     return { success = true, reward = reward, message = Config.Notifications.deliveryPaid:format(reward) }
 end)
@@ -209,6 +232,7 @@ end)
 RegisterNetEvent('oilrunner:server:cancelDelivery', function()
     local state = getPlayerState(source)
     state.delivering = false
+    state.deliveryStartedAt = nil
 end)
 
 lib.callback.register('oilrunner:server:returnTug', function(source, netId)
