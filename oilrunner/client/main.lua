@@ -83,15 +83,14 @@ local function getCurrentVehicleNetId()
     return NetworkGetNetworkIdFromEntity(vehicle), vehicle
 end
 
-local function isInsideRegisteredTug()
+local function isInsideTug()
     local netId, vehicle = getCurrentVehicleNetId()
 
-    if not netId or not PlayerState.tugNetId or vehicle == 0 then
+    if not netId or vehicle == 0 then
         return false, netId, vehicle
     end
 
-    -- Client-side check only confirms the player is in a Tug and has a registered job Tug.
-    -- Exact ownership is validated server-side by net id + generated plate.
+    -- The user only needs to be inside a Tug; job/deposit/route state stays server-side.
     return GetEntityModel(vehicle) == Config.TugModel, netId, vehicle
 end
 
@@ -210,9 +209,9 @@ local function startLoadingOil()
         return
     end
 
-    local inTug, netId = isInsideRegisteredTug()
+    local inTug, netId = isInsideTug()
     if not inTug then
-        notify(Config.Text.notInRegisteredTug, 'error')
+        notify(Config.Text.notInTug, 'error')
         return
     end
 
@@ -258,9 +257,9 @@ local function startDeliverOil()
         return
     end
 
-    local inTug, netId = isInsideRegisteredTug()
+    local inTug, netId = isInsideTug()
     if not inTug then
-        notify(Config.Text.notInRegisteredTug, 'error')
+        notify(Config.Text.notInTug, 'error')
         return
     end
 
@@ -306,9 +305,9 @@ local function returnTug()
         return
     end
 
-    local inTug, netId = isInsideRegisteredTug()
+    local inTug, netId = isInsideTug()
     if not inTug then
-        notify(Config.Text.notInRegisteredTug, 'error')
+        notify(Config.Text.notInTug, 'error')
         return
     end
 

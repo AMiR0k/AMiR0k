@@ -1,7 +1,7 @@
--- Optional but recommended registration table for Oil Runner Tug ownership/state.
+-- Optional but recommended registration table for Oil Runner Tug tracking/state.
 -- Import this file into your ESX database before starting the resource.
 -- The server also keeps live memory state; this table documents/registers each active Tug
--- by player identifier, generated plate and network id for easier validation/debugging.
+-- by player identifier, generated plate and network id for easier debugging. Runtime validation only requires the player to be inside any Tug.
 
 CREATE TABLE IF NOT EXISTS `oilrunner_active_tugs` (
     `identifier` VARCHAR(64) NOT NULL,

@@ -58,10 +58,6 @@ local function distanceTo(source, coords)
     return #(GetEntityCoords(ped) - coords)
 end
 
-local function normalizePlate(plate)
-    return (plate or ''):upper():gsub('%s+', '')
-end
-
 local function generateTugPlate(source)
     return ('OIL%04d'):format((source * 97 + math.random(0, 9999)) % 10000)
 end
@@ -113,33 +109,14 @@ local function removeTugFromDatabase(state)
     dbExecute('DELETE FROM oilrunner_active_tugs WHERE identifier = ?', { state.identifier })
 end
 
-local function isPlayerInRegisteredTug(source, _netId)
-    local state = getState(source)
-    if not state.tugNetId or not state.tugPlate then
-        return false
-    end
-
+local function isPlayerInTug(source)
     local ped = getPed(source)
     if not ped then
         return false
     end
 
     local vehicle = GetVehiclePedIsIn(ped, false)
-    if vehicle == 0 or GetEntityModel(vehicle) ~= Config.TugModel then
-        return false
-    end
-
-    local currentNetId = NetworkGetNetworkIdFromEntity(vehicle)
-    local currentPlate = normalizePlate(GetVehicleNumberPlateText(vehicle))
-    local registeredPlate = normalizePlate(state.tugPlate)
-    local registeredEntity = NetworkGetEntityFromNetworkId(state.tugNetId)
-
-    if registeredEntity ~= 0 and DoesEntityExist(registeredEntity) then
-        return vehicle == registeredEntity and currentPlate == registeredPlate
-    end
-
-    -- Fallback for older artifacts/streaming edge-cases: the generated server plate is still unique per active route.
-    return currentNetId == state.tugNetId or currentPlate == registeredPlate
+    return vehicle ~= 0 and GetEntityModel(vehicle) == Config.TugModel
 end
 
 local function deleteTugEntity(netId)
@@ -148,7 +125,7 @@ local function deleteTugEntity(netId)
         DeleteEntity(entity)
     end
 
-    -- Client fallback covers ownership/streaming edge-cases on older artifacts.
+    -- Client fallback covers streaming edge-cases on older artifacts.
     TriggerClientEvent('oilrunner:client:deleteTug', -1, netId)
 end
 
@@ -257,8 +234,8 @@ lib.callback.register('oilrunner:server:beginLoadOil', function(source, netId)
         return response(false, Config.Text.exploitBlocked)
     end
 
-    if not isPlayerInRegisteredTug(source, netId) then
-        return response(false, Config.Text.notInRegisteredTug)
+    if not isPlayerInTug(source) then
+        return response(false, Config.Text.notInTug)
     end
 
     state.loading = true
@@ -286,8 +263,8 @@ lib.callback.register('oilrunner:server:finishLoadOil', function(source, netId, 
         return response(false, Config.Text.exploitBlocked)
     end
 
-    if not isPlayerInRegisteredTug(source, netId) then
-        return response(false, Config.Text.notInRegisteredTug)
+    if not isPlayerInTug(source) then
+        return response(false, Config.Text.notInTug)
     end
 
     state.hasOil = true
@@ -311,8 +288,8 @@ lib.callback.register('oilrunner:server:beginDeliverOil', function(source, netId
         return response(false, Config.Text.exploitBlocked)
     end
 
-    if not isPlayerInRegisteredTug(source, netId) then
-        return response(false, Config.Text.notInRegisteredTug)
+    if not isPlayerInTug(source) then
+        return response(false, Config.Text.notInTug)
     end
 
     state.delivering = true
@@ -341,8 +318,8 @@ lib.callback.register('oilrunner:server:finishDeliverOil', function(source, netI
         return response(false, Config.Text.exploitBlocked)
     end
 
-    if not isPlayerInRegisteredTug(source, netId) then
-        return response(false, Config.Text.notInRegisteredTug)
+    if not isPlayerInTug(source) then
+        return response(false, Config.Text.notInTug)
     end
 
     local reward = math.random(Config.Reward.min, Config.Reward.max)
@@ -370,8 +347,8 @@ lib.callback.register('oilrunner:server:returnTug', function(source, netId)
         return response(false, Config.Text.exploitBlocked)
     end
 
-    if not isPlayerInRegisteredTug(source, netId) then
-        return response(false, Config.Text.notInRegisteredTug)
+    if not isPlayerInTug(source) then
+        return response(false, Config.Text.notInTug)
     end
 
     local tugNetId = state.tugNetId
