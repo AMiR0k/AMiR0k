@@ -1,0 +1,19 @@
+Locales = Locales or {}
+Locales.en = {
+    rent_vehicle = 'Rent Vehicle',
+    currently_rented = 'Currently Rented',
+    available_in = 'Available in %s minutes',
+    rental_info = 'Rental Information',
+    owner_panel = 'Rental Owner Panel',
+    admin_panel = 'Rental Admin Panel',
+    price = 'Price',
+    deposit = 'Deposit',
+    renter = 'Renter',
+    status = 'Status',
+    revenue = 'Revenue',
+    cancel = 'Cancel rental',
+    impound = 'Move to impound',
+    collect = 'Collect revenue',
+    cash = 'Cash',
+    bank = 'Bank'
+}
