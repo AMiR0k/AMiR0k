@@ -1,0 +1,19 @@
+Locales = Locales or {}
+Locales.fa = {
+    rent_vehicle = 'اجاره خودرو',
+    currently_rented = 'در حال اجاره',
+    available_in = 'آزاد تا %s دقیقه دیگر',
+    rental_info = 'اطلاعات اجاره',
+    owner_panel = 'پنل مالک اجاره',
+    admin_panel = 'پنل مدیریت اجاره',
+    price = 'قیمت',
+    deposit = 'ودیعه',
+    renter = 'مستأجر',
+    status = 'وضعیت',
+    revenue = 'درآمد',
+    cancel = 'لغو اجاره',
+    impound = 'انتقال به پارکینگ توقیفی',
+    collect = 'دریافت درآمد',
+    cash = 'نقدی',
+    bank = 'بانک'
+}
